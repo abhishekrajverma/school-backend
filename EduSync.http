@@ -1,0 +1,244 @@
+@host = http://localhost:5000
+@tenantId = demo-school-001
+
+### Health
+GET {{host}}/api/health
+
+### Login (demo admin)
+# @name login
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@school.edu",
+  "password": "admin123"
+}
+
+### Me
+GET {{host}}/api/auth/me
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### List students
+GET {{host}}/api/students?page=1&pageSize=20
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+X-Correlation-Id: {{$guid}}
+
+### Provision tenant
+POST {{host}}/api/tenants/provision
+Content-Type: application/json
+
+{
+  "schoolName": "Greenwood High",
+  "slug": "greenwood-high",
+  "adminEmail": "admin@greenwood.edu",
+  "adminPassword": "ChangeMe123!",
+  "adminName": "Greenwood Admin",
+  "planId": "professional"
+}
+
+### Tenant branding (public)
+GET {{host}}/api/tenants/by-slug/demo-school
+
+### List teachers
+GET {{host}}/api/teachers?page=1&pageSize=20
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### List parents
+GET {{host}}/api/parents
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Academics — classes
+GET {{host}}/api/academics/classes
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Create admission (public enquiry)
+POST {{host}}/api/admissions
+Content-Type: application/json
+X-Tenant-Id: {{tenantId}}
+
+{
+  "currentStep": "personal",
+  "formData": {
+    "firstName": "Test",
+    "lastName": "Student",
+    "gender": "male",
+    "dateOfBirth": "2019-01-01",
+    "classSought": "Class I",
+    "academicSession": "2026-27",
+    "fatherName": "Parent Name",
+    "email": "parent@example.com",
+    "primaryMobile": "9876543210"
+  }
+}
+
+### Phase 3 — Attendance
+GET {{host}}/api/attendance?date=2024-06-28&entityType=student
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 3 — Fees
+GET {{host}}/api/fees?page=1&pageSize=20
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 3 — Exams
+GET {{host}}/api/exams
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 3 — Timetable
+GET {{host}}/api/timetable?className=10-A&day=Monday
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 3 — Notifications
+GET {{host}}/api/notifications
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 4 — Dashboard
+GET {{host}}/api/dashboard
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 4 — Payroll
+GET {{host}}/api/payroll?month=June&year=2024
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 4 — Library books
+GET {{host}}/api/library/books
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 4 — Leave requests
+GET {{host}}/api/leave-requests
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 4 — Student portal (login as arjun.s@school.edu first)
+# @name studentLogin
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "arjun.s@school.edu",
+  "password": "student123"
+}
+
+GET {{host}}/api/students/me/fees
+Authorization: Bearer {{studentLogin.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 5 — Upload (multipart; use REST client file picker)
+POST {{host}}/api/uploads
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="sample.pdf"
+Content-Type: application/pdf
+
+< ./sample.pdf
+--boundary--
+
+### Phase 5 — Transport assignments
+GET {{host}}/api/transport/assignments
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 5 — Export fees CSV
+GET {{host}}/api/reports/export?format=csv&type=fees
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 5 — Run fee reminder job (admin)
+POST {{host}}/api/jobs/fee-reminders
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 5 — Parent child transport
+GET {{host}}/api/parents/me/children/1/transport
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 6 — PDF report export
+GET {{host}}/api/reports/export?format=pdf&type=fees
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 6 — Import students template
+GET {{host}}/api/imports/students/template
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 6 — Hangfire dashboard (browser)
+# http://localhost:5000/hangfire
+
+### Phase 7 — SignalR hub (use @microsoft/signalr client)
+# ws://localhost:5000/hubs/notifications?access_token={{login.response.body.accessToken}}&tenant_id={{tenantId}}
+
+### Phase 8 — Region info
+GET {{host}}/api/region
+X-Region: ap-south-1
+
+### Phase 8 — Outbox messages (admin)
+GET {{host}}/api/events/outbox?status=pending
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+X-Region: ap-south-1
+
+### Phase 8 — Via gateway (port 5100)
+# @gateway = http://localhost:5100
+# GET {{gateway}}/api/students with same headers
+
+### Phase 9 — API version
+GET {{host}}/api/version
+
+### Phase 9 — V1 students (versioned path)
+GET {{host}}/api/v1/students
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+X-Api-Version: 1.0
+
+### Phase 9 — Audit logs
+GET {{host}}/api/audit/logs
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 9 — Webhooks
+POST {{host}}/api/webhooks
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+Content-Type: application/json
+
+{
+  "url": "https://webhook.site/your-id",
+  "secret": "dev-secret",
+  "eventTypes": "notification.created,student.created"
+}
+
+### Phase 9 — Chaos config
+GET {{host}}/api/chaos/config
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 10 — OIDC config
+GET {{host}}/api/auth/oidc/config
+
+### Phase 10 — Retention policies
+GET {{host}}/api/retention/policies
+Authorization: Bearer {{login.response.body.accessToken}}
+X-Tenant-Id: {{tenantId}}
+
+### Phase 10 — GraphQL (POST to /graphql)
+# POST {{host}}/graphql
+# Authorization: Bearer {{login.response.body.accessToken}}
+# X-Tenant-Id: {{tenantId}}
+# Body: { "query": "{ students(page:1, pageSize:5) { id fullName } }" }

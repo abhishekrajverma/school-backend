@@ -1,0 +1,12 @@
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+appsettings.*.local.json
+scripts/azure/setup-sql.parameters.json
+scripts/azure/connection-string.local.txt
+.env
+.DS_Store
+uploads/

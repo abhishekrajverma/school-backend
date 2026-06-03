@@ -1,0 +1,42 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EduSync.Api/EduSync.Api.csproj" />
+    <Project Path="src/EduSync.Gateway/EduSync.Gateway.csproj" />
+    <Project Path="src/EduSync.Infrastructure/EduSync.Infrastructure.csproj" />
+    <Project Path="src/EduSync.SharedKernel/EduSync.SharedKernel.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/">
+    <Project Path="src/Modules/EduSync.Modules.Academics/EduSync.Modules.Academics.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Admissions/EduSync.Modules.Admissions.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Attendance/EduSync.Modules.Attendance.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Exams/EduSync.Modules.Exams.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Fees/EduSync.Modules.Fees.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Identity/EduSync.Modules.Identity.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Notifications/EduSync.Modules.Notifications.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Parents/EduSync.Modules.Parents.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Staff/EduSync.Modules.Staff.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Students/EduSync.Modules.Students.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Tenancy/EduSync.Modules.Tenancy.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Timetable/EduSync.Modules.Timetable.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Payroll/EduSync.Modules.Payroll.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Leave/EduSync.Modules.Leave.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Library/EduSync.Modules.Library.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Transport/EduSync.Modules.Transport.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Hostel/EduSync.Modules.Hostel.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Inventory/EduSync.Modules.Inventory.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Dashboard/EduSync.Modules.Dashboard.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Portals/EduSync.Modules.Portals.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Uploads/EduSync.Modules.Uploads.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Jobs/EduSync.Modules.Jobs.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Imports/EduSync.Modules.Imports.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Events/EduSync.Modules.Events.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Audit/EduSync.Modules.Audit.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Webhooks/EduSync.Modules.Webhooks.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Compliance/EduSync.Modules.Compliance.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EduSync.ArchitectureTests/EduSync.ArchitectureTests.csproj" />
+    <Project Path="tests/EduSync.IntegrationTests/EduSync.IntegrationTests.csproj" />
+    <Project Path="tests/EduSync.UnitTests/EduSync.UnitTests.csproj" />
+  </Folder>
+</Solution>

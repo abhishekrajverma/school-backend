@@ -1,0 +1,14 @@
+{
+  "resourceGroup": "edusync-prod-rg",
+  "location": "centralindia",
+  "sqlServerName": "edusync-sql-prod-001",
+  "databaseName": "EduSync",
+  "sqlAdminUser": "sqladmin",
+  "sqlAdminPassword": "CHANGE_ME_Strong_Server_Admin_Passw0rd!",
+  "appUserName": "edusync_app",
+  "appUserPassword": "CHANGE_ME_Strong_App_Passw0rd!",
+  "vCores": 4,
+  "maxSizeGb": 32,
+  "allowAzureServices": true,
+  "addCurrentClientIpFirewallRule": true
+}
