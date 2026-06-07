@@ -561,6 +561,7 @@ This does not affect runtime behavior.
 |----------|---------|
 | [ENDPOINTS.md](ENDPOINTS.md) | Frontend path ↔ backend path |
 | [SCHEMA.md](SCHEMA.md) | SQL schemas & tables |
+| [ERD.md](ERD.md) | Entity relationship diagrams (Mermaid) |
 | [CAPACITY.md](CAPACITY.md) | 200 schools × 300 concurrent, single-database production profile |
 | [SCALING.md](SCALING.md) | Redis, replicas, microservice extraction |
 | [README.md](../README.md) | Run locally, phases 1–10, Docker |

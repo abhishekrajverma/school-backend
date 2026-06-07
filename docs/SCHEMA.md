@@ -1,6 +1,8 @@
-# SQL schema overview (Phase 1–5)
+# SQL schema overview
 
 Shared database, schema-separated modules. All tenant-bound tables include `TenantId` (uniqueidentifier) and audit columns.
+
+**Entity relationship diagrams:** see **[ERD.md](ERD.md)** (Mermaid ERDs by domain + full tenant-centric view).
 
 ## `tenancy`
 
@@ -164,37 +166,6 @@ Indexes: leading `TenantId` on filtered tables; unique `(TenantId, ExternalId)`,
 |-------|---------|
 | `Assignments` | Student ↔ route enrollment |
 
-## ER (Phase 1–5)
+## Quick ER summary
 
-```mermaid
-erDiagram
-    Tenants ||--o| TenantSubscriptions : has
-    Tenants ||--o{ AcademicYears : has
-    Tenants ||--o{ TenantMemberships : has
-    Users ||--o{ TenantMemberships : has
-    Users ||--o{ RefreshTokens : has
-    Tenants ||--o{ Students : owns
-    Tenants ||--o{ Teachers : owns
-    Tenants ||--o{ Parents : owns
-    Tenants ||--o{ Classes : owns
-    Tenants ||--o{ Subjects : owns
-    Tenants ||--o{ Applications : owns
-    Tenants ||--o{ Records : owns
-    Tenants ||--o{ Invoices : owns
-    Invoices ||--o{ Payments : has
-    Tenants ||--o{ Exams : owns
-    Tenants ||--o{ Entries : owns
-    Tenants ||--o{ Notifications : owns
-    Tenants ||--o{ Records : payroll
-    Tenants ||--o{ Requests : leave
-    Tenants ||--o{ Books : owns
-    Books ||--o{ Issues : has
-    Tenants ||--o{ Vehicles : owns
-    Tenants ||--o{ Routes : owns
-    Tenants ||--o{ Rooms : hostel
-    Rooms ||--o{ Allocations : has
-    Tenants ||--o{ Items : inventory
-    Tenants ||--o{ Files : uploads
-    Tenants ||--o{ Executions : jobs
-    Tenants ||--o{ Assignments : transport
-```
+Full diagrams (all phases, FK vs logical links, key columns): **[ERD.md](ERD.md)**.

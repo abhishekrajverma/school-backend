@@ -14,6 +14,7 @@ namespace EduSync.Infrastructure.Application.Admissions;
 public sealed class ListAdmissionsQueryHandler(EduSyncDbContext db)
     : IRequestHandler<ListAdmissionsQuery, Result<PaginatedList<AdmissionListItemDto>>>
 {
+    // list admissions query handler is used to list all admissions based on the status passed in the request 
     public async Task<Result<PaginatedList<AdmissionListItemDto>>> Handle(
         ListAdmissionsQuery request,
         CancellationToken cancellationToken)
@@ -31,7 +32,7 @@ public sealed class ListAdmissionsQueryHandler(EduSyncDbContext db)
             PaginatedList<AdmissionListItemDto>.Create(items, page.Page, page.PageSize, page.TotalCount));
     }
 }
-
+// get admission by id query handler is used to get an admission by its external id 
 public sealed class GetAdmissionByIdQueryHandler(EduSyncDbContext db)
     : IRequestHandler<GetAdmissionByIdQuery, Result<AdmissionDetailDto>>
 {

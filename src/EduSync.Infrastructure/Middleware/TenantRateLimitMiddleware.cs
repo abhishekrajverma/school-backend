@@ -2,6 +2,7 @@ using EduSync.Infrastructure.Caching;
 using EduSync.Infrastructure.Tenancy;
 using EduSync.SharedKernel.Constants;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 
@@ -11,6 +12,7 @@ public sealed class TenantRateLimitMiddleware(RequestDelegate next)
 {
     private static readonly HashSet<string> ExcludedPaths = new(StringComparer.OrdinalIgnoreCase)
     {
+        "/health",
         "/api/health",
         "/swagger",
         "/hangfire",
@@ -20,10 +22,10 @@ public sealed class TenantRateLimitMiddleware(RequestDelegate next)
     public async Task InvokeAsync(
         HttpContext context,
         ITenantContext tenantContext,
-        IConnectionMultiplexer? redis,
         IOptions<RedisOptions> redisOptions)
     {
         var options = redisOptions.Value;
+        var redis = context.RequestServices.GetService<IConnectionMultiplexer>();
         if (!options.Enabled || redis is null || options.RateLimitPerMinute <= 0)
         {
             await next(context);

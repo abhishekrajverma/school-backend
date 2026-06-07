@@ -194,8 +194,11 @@ Copy `src/EduSync.Api/appsettings.Development.json` and set:
 - **[docs/CODEBASE_GUIDE.md](docs/CODEBASE_GUIDE.md)** — **Folder structure, diagrams, “where to change” lookup** (start here when editing code)
 - [docs/ENDPOINTS.md](docs/ENDPOINTS.md) — Frontend route mapping
 - [docs/SCHEMA.md](docs/SCHEMA.md) — SQL schemas per module
+- [docs/ERD.md](docs/ERD.md) — **Entity relationship diagrams (data model)**
 - [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md) — **Test on your PC first (Docker SQL)**
-- [docs/AZURE_DATABASE_SETUP.md](docs/AZURE_DATABASE_SETUP.md) — **Create Azure SQL + connection string + migrations**
+- [docs/PILOT_LAUNCH_CHECKLIST.md](docs/PILOT_LAUNCH_CHECKLIST.md) — **10-school pilot go-live checklist**
+- [docs/AZURE_FREE_SQL_SETUP.md](docs/AZURE_FREE_SQL_SETUP.md) — **Azure free SQL offer (portal) + connect EduSync**
+- [docs/AZURE_DATABASE_SETUP.md](docs/AZURE_DATABASE_SETUP.md) — **Paid Azure SQL (production / 10+ schools)**
 - [docs/CAPACITY.md](docs/CAPACITY.md) — **200 schools × 300 concurrent, single-database production profile**
 - [docs/SCALING.md](docs/SCALING.md) — Scale-out and extraction notes
 

@@ -12,6 +12,7 @@ using EduSync.Modules.Students.Domain;
 using EduSync.Modules.Tenancy.Domain;
 using EduSync.Infrastructure.Application.Admissions;
 using EduSync.Infrastructure.Application.Timetable;
+using EduSync.Infrastructure.Tenancy;
 using EduSync.Modules.Attendance.Domain;
 using EduSync.Modules.Exams.Domain;
 using EduSync.Modules.Fees.Domain;
@@ -42,31 +43,17 @@ public static class SeedData
         var db = scope.ServiceProvider.GetRequiredService<EduSyncDbContext>();
         var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
         var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("SeedData");
+        var tenantContext = (TenantContext)scope.ServiceProvider.GetRequiredService<ITenantContext>();
 
         await db.Database.MigrateAsync(cancellationToken);
 
         if (await db.Tenants.AnyAsync(cancellationToken))
         {
-            if (!await db.Teachers.AnyAsync(cancellationToken))
-            {
-                await SeedPhase2Async(db, DemoTenantGuid, cancellationToken);
-            }
-
-            if (!await db.AttendanceRecords.AnyAsync(cancellationToken))
-            {
-                await SeedPhase3Async(db, DemoTenantGuid, cancellationToken);
-            }
-
-            if (!await db.PayrollRecords.AnyAsync(cancellationToken))
-            {
-                await SeedPhase4Async(db, DemoTenantGuid, cancellationToken);
-            }
-
-            if (!await db.TransportAssignments.AnyAsync(cancellationToken))
-            {
-                await SeedPhase5Async(db, DemoTenantGuid, cancellationToken);
-            }
-
+            tenantContext.Set(DemoTenantGuid, DemoTenantSlug, DemoTenantExternalId);
+            await SeedPhase2IfMissingAsync(db, DemoTenantGuid, cancellationToken);
+            await SeedPhase3IfMissingAsync(db, DemoTenantGuid, cancellationToken);
+            await SeedPhase4IfMissingAsync(db, DemoTenantGuid, cancellationToken);
+            await SeedPhase5IfMissingAsync(db, DemoTenantGuid, cancellationToken);
             return;
         }
 
@@ -117,27 +104,45 @@ public static class SeedData
 
         db.Users.AddRange(users);
         db.Students.AddRange(CreateDemoStudents(DemoTenantGuid));
-        SeedPhase2Entities(db, DemoTenantGuid);
-        SeedPhase3Entities(db, DemoTenantGuid);
-        SeedPhase4Entities(db, DemoTenantGuid);
-        SeedPhase5Entities(db, DemoTenantGuid);
+        await SeedPhase2IfMissingAsync(db, DemoTenantGuid, cancellationToken);
+        await SeedPhase3IfMissingAsync(db, DemoTenantGuid, cancellationToken);
+        await SeedPhase4IfMissingAsync(db, DemoTenantGuid, cancellationToken);
+        await SeedPhase5IfMissingAsync(db, DemoTenantGuid, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private static async Task SeedPhase2Async(EduSyncDbContext db, Guid tenantId, CancellationToken cancellationToken)
+    private static async Task SeedPhase2IfMissingAsync(EduSyncDbContext db, Guid tenantId, CancellationToken cancellationToken)
     {
-        SeedPhase2Entities(db, tenantId);
-        await db.SaveChangesAsync(cancellationToken);
-    }
+        if (!await db.Teachers.AnyAsync(cancellationToken))
+        {
+            db.Teachers.AddRange(CreateDemoTeachers(tenantId));
+        }
 
-    private static void SeedPhase2Entities(EduSyncDbContext db, Guid tenantId)
-    {
-        db.Teachers.AddRange(CreateDemoTeachers(tenantId));
-        db.Parents.AddRange(CreateDemoParents(tenantId));
-        db.Classes.AddRange(CreateDemoClasses(tenantId));
-        db.Subjects.AddRange(CreateDemoSubjects(tenantId));
-        db.AdmissionApplications.Add(CreateSampleAdmission(tenantId));
+        if (!await db.Parents.AnyAsync(cancellationToken))
+        {
+            db.Parents.AddRange(CreateDemoParents(tenantId));
+        }
+
+        if (!await db.Classes.AnyAsync(cancellationToken))
+        {
+            db.Classes.AddRange(CreateDemoClasses(tenantId));
+        }
+
+        if (!await db.Subjects.AnyAsync(cancellationToken))
+        {
+            db.Subjects.AddRange(CreateDemoSubjects(tenantId));
+        }
+
+        if (!await db.AdmissionApplications.AnyAsync(cancellationToken))
+        {
+            db.AdmissionApplications.Add(CreateSampleAdmission(tenantId));
+        }
+
+        if (db.ChangeTracker.HasChanges())
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private static IEnumerable<Teacher> CreateDemoTeachers(Guid tenantId)
@@ -315,31 +320,36 @@ public static class SeedData
         AvatarUrl = $"https://api.dicebear.com/7.x/avataaars/svg?seed={firstName.ToLowerInvariant()}",
     };
 
-    private static async Task SeedPhase3Async(EduSyncDbContext db, Guid tenantId, CancellationToken cancellationToken)
-    {
-        SeedPhase3Entities(db, tenantId);
-        await db.SaveChangesAsync(cancellationToken);
-    }
-
-    private static void SeedPhase3Entities(EduSyncDbContext db, Guid tenantId)
+    private static async Task SeedPhase3IfMissingAsync(EduSyncDbContext db, Guid tenantId, CancellationToken cancellationToken)
     {
         var date = new DateOnly(2024, 6, 28);
-        db.AttendanceRecords.AddRange(
+        if (!await db.AttendanceRecords.AnyAsync(cancellationToken))
+        {
+            db.AttendanceRecords.AddRange(
             CreateAttendance(tenantId, "1", "student", "1", "Arjun Sharma", "10-A", date, "present", "08:45", "03:30", null),
             CreateAttendance(tenantId, "2", "student", "2", "Priya Patel", "8-B", date, "present", "08:50", "03:30", null),
             CreateAttendance(tenantId, "3", "student", "3", "Rahul Verma", "12-A", date, "late", "09:15", "03:30", "Traffic delay"),
             CreateAttendance(tenantId, "4", "student", "4", "Sneha Gupta", "9-C", date, "absent", null, null, "Sick leave"));
+        }
 
-        db.FeeInvoices.AddRange(
+        if (!await db.FeeInvoices.AnyAsync(cancellationToken))
+        {
+            db.FeeInvoices.AddRange(
             CreateFee(tenantId, "1", "INV2024001", "1", "Arjun Sharma", "10-A", 120000, 120000, 0, "paid", "bank_transfer", new DateOnly(2024, 6, 30), new DateOnly(2024, 6, 15)),
             CreateFee(tenantId, "2", "INV2024002", "2", "Priya Patel", "8-B", 100000, 58000, 42000, "pending", null, new DateOnly(2024, 6, 15), null),
             CreateFee(tenantId, "4", "INV2024004", "4", "Sneha Gupta", "9-C", 110000, 44000, 66000, "overdue", null, new DateOnly(2024, 5, 31), null));
+        }
 
-        db.Exams.AddRange(
+        if (!await db.Exams.AnyAsync(cancellationToken))
+        {
+            db.Exams.AddRange(
             CreateExam(tenantId, "1", "Mid-Term Mathematics", "mid_term", "Mathematics", "10-A", new DateOnly(2024, 7, 15), "scheduled", 45),
             CreateExam(tenantId, "2", "Unit Test - Physics", "unit_test", "Physics", "12-A", new DateOnly(2024, 6, 28), "completed", 38));
+        }
 
-        var periods = new[]
+        if (!await db.TimetableEntries.AnyAsync(cancellationToken))
+        {
+            var periods = new[]
         {
             new TimetablePeriodDto("09:00-09:45", "Mathematics", "Mrs. Anita Singh", "Room 201"),
             new TimetablePeriodDto("09:45-10:30", "Physics", "Mr. Suresh Menon", "Lab 1"),
@@ -354,8 +364,11 @@ public static class SeedData
             Day = "Monday",
             PeriodsJson = TimetableMapping.SerializePeriods(periods),
         });
+        }
 
-        db.Notifications.AddRange(
+        if (!await db.Notifications.AnyAsync(cancellationToken))
+        {
+            db.Notifications.AddRange(
             new Notification
             {
                 Id = Guid.NewGuid(), TenantId = tenantId, ExternalId = "1",
@@ -372,6 +385,12 @@ public static class SeedData
                 Type = "info", TargetAudience = "all",
                 SentAt = DateTime.UtcNow.AddDays(-12), ReadCount = 3000, TotalRecipients = 3200,
             });
+        }
+
+        if (db.ChangeTracker.HasChanges())
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private static AttendanceRecord CreateAttendance(
@@ -402,38 +421,55 @@ public static class SeedData
         TotalMarks = 100, PassingMarks = 35, Room = "Hall A", Status = status, StudentsCount = students,
     };
 
-    private static async Task SeedPhase4Async(EduSyncDbContext db, Guid tenantId, CancellationToken cancellationToken)
+    private static async Task SeedPhase4IfMissingAsync(EduSyncDbContext db, Guid tenantId, CancellationToken cancellationToken)
     {
-        SeedPhase4Entities(db, tenantId);
-        await db.SaveChangesAsync(cancellationToken);
-    }
-
-    private static void SeedPhase4Entities(EduSyncDbContext db, Guid tenantId)
-    {
-        db.PayrollRecords.AddRange(
+        if (!await db.PayrollRecords.AnyAsync(cancellationToken))
+        {
+            db.PayrollRecords.AddRange(
             CreatePayroll(tenantId, "1", "1", "Dr. Rajesh Kumar", "Science", "June", 2024, 70000, 7000, 3500, 2000, 1500, 1000, 4200, 5800, 500, 0, 0, 0, "pending", null),
             CreatePayroll(tenantId, "5", "5", "Mr. Suresh Menon", "Science", "June", 2024, 65000, 6500, 3250, 1750, 1000, 500, 3900, 5000, 500, 0, 0, 0, "paid", new DateOnly(2024, 6, 28)));
+        }
 
-        db.LeaveRequests.AddRange(
+        if (!await db.LeaveRequests.AnyAsync(cancellationToken))
+        {
+            db.LeaveRequests.AddRange(
             CreateLeave(tenantId, "1", "4", "Ms. Deepa Nair", "History", "sick", new DateOnly(2024, 6, 20), new DateOnly(2024, 6, 25), 6, "Medical treatment", "approved", new DateOnly(2024, 6, 18)),
             CreateLeave(tenantId, "2", "2", "Mrs. Anita Singh", "Mathematics", "casual", new DateOnly(2024, 7, 1), new DateOnly(2024, 7, 2), 2, "Family function", "pending", new DateOnly(2024, 6, 25)));
+        }
 
-        var book1 = CreateBook(tenantId, "1", "The Great Gatsby", "F. Scott Fitzgerald", "9780743273565", "Fiction", 10, 7, 3);
-        var book3 = CreateBook(tenantId, "3", "Physics for Class 12", "H.C. Verma", "9788177091878", "Textbook", 50, 35, 15);
-        db.Books.AddRange(book1, book3);
-        db.BookIssues.Add(CreateIssue(tenantId, "1", book1, "1", "Arjun Sharma", "student", "10-A", new DateOnly(2024, 6, 1), new DateOnly(2024, 6, 15), null, "issued", 0));
+        if (!await db.Books.AnyAsync(cancellationToken))
+        {
+            var book1 = CreateBook(tenantId, "1", "The Great Gatsby", "F. Scott Fitzgerald", "9780743273565", "Fiction", 10, 7, 3);
+            var book3 = CreateBook(tenantId, "3", "Physics for Class 12", "H.C. Verma", "9788177091878", "Textbook", 50, 35, 15);
+            db.Books.AddRange(book1, book3);
+            db.BookIssues.Add(CreateIssue(tenantId, "1", book1, "1", "Arjun Sharma", "student", "10-A", new DateOnly(2024, 6, 1), new DateOnly(2024, 6, 15), null, "issued", 0));
+        }
 
-        var route1 = CreateRoute(tenantId, "1", "Route A - North Zone", "1", "MH-01-AB-1234", "Ramesh Kumar", 8, 42, 3500, "active", "15 km");
-        db.TransportRoutes.Add(route1);
-        db.Vehicles.Add(CreateVehicle(tenantId, "1", "MH-01-AB-1234", "bus", 50, "Ramesh Kumar", "+91 98765 11111", "MH0120150012345", "1", route1.RouteName, new DateOnly(2025, 3, 15), new DateOnly(2024, 12, 31), 42, "active"));
+        if (!await db.TransportRoutes.AnyAsync(cancellationToken))
+        {
+            var route1 = CreateRoute(tenantId, "1", "Route A - North Zone", "1", "MH-01-AB-1234", "Ramesh Kumar", 8, 42, 3500, "active", "15 km");
+            db.TransportRoutes.Add(route1);
+            db.Vehicles.Add(CreateVehicle(tenantId, "1", "MH-01-AB-1234", "bus", 50, "Ramesh Kumar", "+91 98765 11111", "MH0120150012345", "1", route1.RouteName, new DateOnly(2025, 3, 15), new DateOnly(2024, 12, 31), 42, "active"));
+        }
 
-        db.HostelRooms.AddRange(
+        if (!await db.HostelRooms.AnyAsync(cancellationToken))
+        {
+            db.HostelRooms.AddRange(
             CreateRoom(tenantId, "1", "A-101", "Boys Block A", 4, 4, 1, "Mr. Sharma", "full", 12000),
             CreateRoom(tenantId, "2", "A-102", "Boys Block A", 4, 3, 1, "Mr. Sharma", "available", 12000));
+        }
 
-        db.InventoryItems.AddRange(
+        if (!await db.InventoryItems.AnyAsync(cancellationToken))
+        {
+            db.InventoryItems.AddRange(
             CreateInventory(tenantId, "1", "Desktop Computer", "IT Equipment", "IT-DC-001", 45, 10, "pcs", "Computer Lab", new DateOnly(2024, 6, 10)),
             CreateInventory(tenantId, "2", "Chemistry Lab Kit", "Lab Supplies", "LAB-CH-012", 8, 15, "sets", "Lab 2", new DateOnly(2024, 5, 20), true));
+        }
+
+        if (db.ChangeTracker.HasChanges())
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private static PayrollRecord CreatePayroll(
@@ -530,17 +566,15 @@ public static class SeedData
         Status = lowStock ? "low-stock" : "in-stock",
     };
 
-    private static async Task SeedPhase5Async(EduSyncDbContext db, Guid tenantId, CancellationToken cancellationToken)
+    private static async Task SeedPhase5IfMissingAsync(EduSyncDbContext db, Guid tenantId, CancellationToken cancellationToken)
     {
-        SeedPhase5Entities(db, tenantId);
-        await db.SaveChangesAsync(cancellationToken);
-    }
-
-    private static void SeedPhase5Entities(EduSyncDbContext db, Guid tenantId)
-    {
-        db.TransportAssignments.AddRange(
-            CreateAssignment(tenantId, "1", "1", "Arjun Sharma", "1", 5, "both", new DateOnly(2023, 6, 1), "active", "A-12"),
-            CreateAssignment(tenantId, "2", "2", "Priya Patel", "2", 3, "both", new DateOnly(2023, 6, 1), "active", "B-08"));
+        if (!await db.TransportAssignments.AnyAsync(cancellationToken))
+        {
+            db.TransportAssignments.AddRange(
+                CreateAssignment(tenantId, "1", "1", "Arjun Sharma", "1", 5, "both", new DateOnly(2023, 6, 1), "active", "A-12"),
+                CreateAssignment(tenantId, "2", "2", "Priya Patel", "2", 3, "both", new DateOnly(2023, 6, 1), "active", "B-08"));
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private static TransportAssignment CreateAssignment(

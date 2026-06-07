@@ -106,7 +106,19 @@ On startup, **SeedData** creates demo tenant and users if the DB is empty.
 
 ---
 
-## Step 5 — Test login (Swagger or curl)
+## Step 5 — Automated smoke test
+
+With the API running in another terminal:
+
+```powershell
+.\scripts\local\smoke-test.ps1
+```
+
+Expect **all PASS** (health, admin login, students list, RBAC 403 for student, student portal).
+
+---
+
+## Step 6 — Test login (Swagger or curl)
 
 **Headers for all tenant APIs:**
 
@@ -137,13 +149,13 @@ Portal: `GET /api/students/me` with same token.
 
 ---
 
-## Step 6 — REST file (optional)
+## Step 7 — REST file (optional)
 
 Open `EduSync.http` in VS / Rider / VS Code REST Client and run requests (set `@token` after login).
 
 ---
 
-## Step 7 — Next.js dashboard (optional)
+## Step 8 — Next.js dashboard (optional)
 
 In `school-erp-dashboard/.env.local`:
 
