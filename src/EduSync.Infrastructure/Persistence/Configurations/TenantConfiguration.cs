@@ -15,6 +15,7 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(x => x.Slug).HasMaxLength(64).IsRequired();
         builder.HasIndex(x => x.Slug).IsUnique();
         builder.Property(x => x.Name).HasMaxLength(256).IsRequired();
+        builder.Property(x => x.SchoolEmail).HasMaxLength(256);
         builder.Property(x => x.LogoUrl).HasMaxLength(1024);
         builder.HasOne(x => x.Subscription).WithOne(x => x.Tenant).HasForeignKey<TenantSubscription>(x => x.TenantId);
     }

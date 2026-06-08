@@ -18,6 +18,7 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddScoped<ITenantContext, TenantContext>();
+        services.AddScoped<IFinancialYearContext, FinancialYearContext>();
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserContext, CurrentUserContext>();
         services.Configure<UploadOptions>(configuration.GetSection("Uploads"));
@@ -97,6 +98,8 @@ public static class DependencyInjection
             cfg.RegisterServicesFromAssembly(typeof(Modules.Webhooks.Application.ListWebhookSubscriptionsQuery).Assembly);
             cfg.RegisterServicesFromAssembly(typeof(Modules.Compliance.Application.ListRetentionPoliciesQuery).Assembly);
             cfg.RegisterServicesFromAssembly(typeof(Modules.Identity.Application.Commands.OidcLoginCommand).Assembly);
+            cfg.RegisterServicesFromAssembly(typeof(Modules.Company.Application.CreateEnquiryCommand).Assembly);
+            cfg.RegisterServicesFromAssembly(typeof(Modules.Tenancy.Application.Dtos.GetFinancialYearSettingsQuery).Assembly);
         });
 
         services.AddValidatorsFromAssembly(typeof(Modules.Identity.Application.Commands.LoginCommand).Assembly);

@@ -68,6 +68,30 @@ public static class FeesEndpoints
 
 
 
+        fees.MapPut("/{id}", async (string id, UpdateFeeRequest body, ISender sender) =>
+
+        {
+
+            var result = await sender.Send(new UpdateFeeCommand(id, body));
+
+            return result.ToHttpResult(dto => Results.Ok(dto));
+
+        }).RequirePermission(Permissions.FeesWrite);
+
+
+
+        fees.MapDelete("/{id}", async (string id, ISender sender) =>
+
+        {
+
+            var result = await sender.Send(new DeleteFeeCommand(id));
+
+            return result.ToHttpResult();
+
+        }).RequirePermission(Permissions.FeesWrite);
+
+
+
         fees.MapPost("/{id}/payments", async (string id, RecordPaymentRequest body, ISender sender) =>
 
         {

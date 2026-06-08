@@ -21,7 +21,12 @@ public sealed record ListHostelRoomsQuery(PaginationQuery Pagination, string? Bl
     : IRequest<Result<PaginatedList<HostelRoomDto>>>;
 
 public sealed record GetHostelRoomByIdQuery(string ExternalId) : IRequest<Result<HostelRoomDto>>;
+public sealed record UpdateHostelRoomRequest(
+    string? RoomNo, string? Block, int? Capacity, int? Floor, string? Warden, decimal? MonthlyFee, string? Status);
+
 public sealed record CreateHostelRoomCommand(CreateHostelRoomRequest Request) : IRequest<Result<HostelRoomDto>>;
+public sealed record UpdateHostelRoomCommand(string ExternalId, UpdateHostelRoomRequest Request) : IRequest<Result<HostelRoomDto>>;
+public sealed record DeleteHostelRoomCommand(string ExternalId) : IRequest<Result>;
 
 public sealed record ListHostelAllocationsQuery(PaginationQuery Pagination, string? RoomId)
     : IRequest<Result<PaginatedList<HostelAllocationDto>>>;

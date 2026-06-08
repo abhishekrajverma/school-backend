@@ -1,10 +1,10 @@
-using System.Globalization;
-using System.Text;
 using EduSync.Infrastructure.Caching;
 using EduSync.Infrastructure.Persistence;
 using EduSync.Infrastructure.Tenancy;
 using EduSync.Modules.Admissions.Domain;
+using EduSync.Modules.Attendance.Domain;
 using EduSync.Modules.Dashboard.Application;
+using EduSync.Modules.Fees.Domain;
 using EduSync.SharedKernel.Results;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -14,14 +14,16 @@ namespace EduSync.Infrastructure.Application.Dashboard;
 public sealed class GetDashboardQueryHandler(
     IReadDbContextFactory dbFactory,
     ITenantContext tenant,
+    IFinancialYearContext financialYear,
     IDashboardCache dashboardCache)
     : IRequestHandler<GetDashboardQuery, Result<DashboardResponseDto>>
 {
     public async Task<Result<DashboardResponseDto>> Handle(GetDashboardQuery request, CancellationToken ct)
     {
+        var fy = financialYear.FinancialYear ?? FinancialYearDefaults.Demo;
         if (tenant.TenantId.HasValue)
         {
-            var cached = await dashboardCache.GetAsync(tenant.TenantId.Value, ct);
+            var cached = await dashboardCache.GetAsync(tenant.TenantId.Value, fy, ct);
             if (cached is not null)
             {
                 return Result<DashboardResponseDto>.Success(cached);
@@ -29,18 +31,26 @@ public sealed class GetDashboardQueryHandler(
         }
 
         await using var db = dbFactory.CreateDbContext();
-        var students = await db.Students.CountAsync(s => !s.IsDeleted, ct);
+        var studentsQuery = db.Students.Where(s => !s.IsDeleted && s.FinancialYear == fy);
+        var feesQuery = db.FeeInvoices.Where(f => !f.IsDeleted && f.FinancialYear == fy);
+        var attendanceQuery = db.AttendanceRecords.Where(a => !a.IsDeleted && a.FinancialYear == fy && a.EntityType == "student");
+
+        var students = await studentsQuery.CountAsync(ct);
         var teachers = await db.Teachers.CountAsync(t => !t.IsDeleted, ct);
-        var pendingFees = await db.FeeInvoices.Where(f => !f.IsDeleted && f.Status != "paid")
-            .SumAsync(f => f.Pending, ct);
+        var pendingFees = await feesQuery.Where(f => f.Status != "paid").SumAsync(f => f.Pending, ct);
+        var totalCollected = await feesQuery.SumAsync(f => f.Paid, ct);
+        var totalOverdue = await feesQuery.Where(f => f.Status == "overdue").SumAsync(f => f.Pending, ct);
         var monthlyRevenue = await db.FeePayments
             .Where(p => !p.IsDeleted && p.PaidAt >= DateTime.UtcNow.AddDays(-30))
-            .SumAsync(p => p.Amount, ct);
+            .Join(feesQuery, p => p.FeeInvoiceId, f => f.Id, (p, _) => p.Amount)
+            .SumAsync(ct);
+
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var todayRecords = await db.AttendanceRecords.AsNoTracking()
-            .Where(a => !a.IsDeleted && a.Date == today && a.EntityType == "student").ToListAsync(ct);
+        var todayRecords = await attendanceQuery.AsNoTracking()
+            .Where(a => a.Date == today).ToListAsync(ct);
         var present = todayRecords.Count(r => r.Status is "present" or "late");
         var attendancePct = todayRecords.Count == 0 ? 0 : Math.Round(100.0 * present / todayRecords.Count, 1);
+
         var salaryPaid = await db.PayrollRecords.Where(p => !p.IsDeleted && p.Status == "paid")
             .SumAsync(p => p.NetSalary, ct);
         var routes = await db.TransportRoutes.CountAsync(r => !r.IsDeleted && r.Status == "active", ct);
@@ -53,7 +63,8 @@ public sealed class GetDashboardQueryHandler(
 
         var feeByMonth = await db.FeePayments.AsNoTracking()
             .Where(p => !p.IsDeleted && p.PaidAt >= DateTime.UtcNow.AddMonths(-6))
-            .GroupBy(p => new { p.PaidAt.Year, p.PaidAt.Month })
+            .Join(feesQuery, p => p.FeeInvoiceId, f => f.Id, (p, f) => new { p.PaidAt, p.Amount, f.Pending })
+            .GroupBy(x => new { x.PaidAt.Year, x.PaidAt.Month })
             .Select(g => new { g.Key.Year, g.Key.Month, Collected = g.Sum(x => x.Amount) })
             .ToListAsync(ct);
 
@@ -72,25 +83,44 @@ public sealed class GetDashboardQueryHandler(
             ];
         }
 
-        var studentAttendance = new List<AttendanceChartDto>
-        {
-            new("Mon", 2680, 167), new("Tue", 2712, 135), new("Wed", 2695, 152),
-            new("Thu", 2701, 146), new("Fri", 2650, 197),
-        };
+        var weekStart = today.AddDays(-6);
+        var weekRecords = await attendanceQuery.AsNoTracking()
+            .Where(a => a.Date >= weekStart && a.Date <= today).ToListAsync(ct);
+        var weekPresent = weekRecords.Count(r => r.Status is "present" or "late");
+        var weekAvg = weekRecords.Count == 0 ? 0 : Math.Round(100.0 * weekPresent / weekRecords.Count, 1);
+
+        var monthStart = new DateOnly(today.Year, today.Month, 1);
+        var monthRecords = await attendanceQuery.AsNoTracking()
+            .Where(a => a.Date >= monthStart && a.Date <= today).ToListAsync(ct);
+        var monthPresent = monthRecords.Count(r => r.Status is "present" or "late");
+        var monthAvg = monthRecords.Count == 0 ? 0 : Math.Round(100.0 * monthPresent / monthRecords.Count, 1);
+        var workingDays = monthRecords.Select(r => r.Date).Distinct().Count();
+
+        var studentAttendance = BuildWeeklyAttendanceChart(weekRecords);
 
         var attendanceSummary = new
         {
-            today = new { present, absent = todayRecords.Count - present, late = todayRecords.Count(r => r.Status == "late"), total = todayRecords.Count },
-            thisWeek = new { avgAttendance = 94.2, improvement = 1.2 },
-            thisMonth = new { avgAttendance = 93.8, workingDays = 22 },
+            today = new
+            {
+                present,
+                absent = todayRecords.Count - present,
+                late = todayRecords.Count(r => r.Status == "late"),
+                total = todayRecords.Count,
+            },
+            thisWeek = new { avgAttendance = weekAvg, improvement = 0.0 },
+            thisMonth = new { avgAttendance = monthAvg, workingDays },
         };
+
+        var collectionRate = totalCollected + pendingFees > 0
+            ? Math.Round(100.0 * (double)(totalCollected / (totalCollected + pendingFees)), 1)
+            : 0.0;
 
         var feeSummary = new
         {
-            totalCollected = await db.FeeInvoices.Where(f => !f.IsDeleted).SumAsync(f => f.Paid, ct),
+            totalCollected,
             totalPending = pendingFees,
-            totalOverdue = await db.FeeInvoices.Where(f => !f.IsDeleted && f.Status == "overdue").SumAsync(f => f.Pending, ct),
-            collectionRate = 92.5,
+            totalOverdue,
+            collectionRate,
             thisMonth = new { collected = monthlyRevenue, pending = pendingFees },
         };
 
@@ -98,26 +128,46 @@ public sealed class GetDashboardQueryHandler(
             stats, monthlyFeeCollection, studentAttendance, attendanceSummary, feeSummary);
         if (tenant.TenantId.HasValue)
         {
-            await dashboardCache.SetAsync(tenant.TenantId.Value, response, ct);
+            await dashboardCache.SetAsync(tenant.TenantId.Value, fy, response, ct);
         }
 
         return Result<DashboardResponseDto>.Success(response);
     }
+
+    private static List<AttendanceChartDto> BuildWeeklyAttendanceChart(IReadOnlyList<AttendanceRecord> weekRecords)
+    {
+        var weekdays = new[]
+        {
+            (DayOfWeek.Monday, "Mon"),
+            (DayOfWeek.Tuesday, "Tue"),
+            (DayOfWeek.Wednesday, "Wed"),
+            (DayOfWeek.Thursday, "Thu"),
+            (DayOfWeek.Friday, "Fri"),
+        };
+
+        return weekdays.Select(pair =>
+        {
+            var dayRecords = weekRecords.Where(r => r.Date.DayOfWeek == pair.Item1).ToList();
+            var present = dayRecords.Count(r => r.Status is "present" or "late");
+            return new AttendanceChartDto(pair.Item2, present, dayRecords.Count - present);
+        }).ToList();
+    }
 }
 
-public sealed class GetReportQueryHandler(IReadDbContextFactory dbFactory)
+public sealed class GetReportQueryHandler(IReadDbContextFactory dbFactory, IFinancialYearContext financialYear)
     : IRequestHandler<GetReportQuery, Result<object>>
 {
     public async Task<Result<object>> Handle(GetReportQuery request, CancellationToken ct)
     {
         await using var db = dbFactory.CreateDbContext();
+        var fy = financialYear.FinancialYear ?? FinancialYearDefaults.Demo;
         var type = (request.Type ?? "overview").ToLowerInvariant();
         object report = type switch
         {
-            "fees" => await db.FeeInvoices.AsNoTracking().Where(f => !f.IsDeleted)
+            "fees" => await db.FeeInvoices.AsNoTracking().Where(f => !f.IsDeleted && f.FinancialYear == fy)
                 .Select(f => new { f.ExternalId, f.StudentName, f.ClassName, f.TotalFee, f.Paid, f.Pending, f.Status })
                 .Take(100).ToListAsync(ct),
-            "attendance" => await db.AttendanceRecords.AsNoTracking().Where(a => !a.IsDeleted)
+            "attendance" => await db.AttendanceRecords.AsNoTracking().Where(a => !a.IsDeleted && a.FinancialYear == fy)
                 .OrderByDescending(a => a.Date).Take(100)
                 .Select(a => new { a.ExternalId, a.EntityName, a.ClassName, a.Date, a.Status })
                 .ToListAsync(ct),

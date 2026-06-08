@@ -95,3 +95,68 @@ public sealed class CreateSubjectCommandHandler(EduSyncDbContext db, ITenantCont
         return Result<SubjectDto>.Success(AcademicsMapping.ToDto(entity));
     }
 }
+
+public sealed class UpdateClassCommandHandler(EduSyncDbContext db)
+    : IRequestHandler<UpdateClassCommand, Result<ClassDto>>
+{
+    public async Task<Result<ClassDto>> Handle(UpdateClassCommand request, CancellationToken cancellationToken)
+    {
+        var entity = await db.Classes.FirstOrDefaultAsync(c => c.ExternalId == request.ExternalId && !c.IsDeleted, cancellationToken);
+        if (entity is null) return Result<ClassDto>.Failure(Error.NotFound("Class not found."));
+
+        var body = request.Request;
+        if (body.Name is not null) entity.Name = body.Name.Trim();
+        if (body.Sections is not null) entity.SectionsJson = AcademicsMapping.SerializeSections(body.Sections);
+        if (body.TotalStudents.HasValue) entity.TotalStudents = body.TotalStudents.Value;
+        if (body.ClassTeacher is not null) entity.ClassTeacherName = body.ClassTeacher;
+        await db.SaveChangesAsync(cancellationToken);
+        return Result<ClassDto>.Success(AcademicsMapping.ToDto(entity));
+    }
+}
+
+public sealed class DeleteClassCommandHandler(EduSyncDbContext db)
+    : IRequestHandler<DeleteClassCommand, Result>
+{
+    public async Task<Result> Handle(DeleteClassCommand request, CancellationToken cancellationToken)
+    {
+        var entity = await db.Classes.FirstOrDefaultAsync(c => c.ExternalId == request.ExternalId && !c.IsDeleted, cancellationToken);
+        if (entity is null) return Result.Failure(Error.NotFound("Class not found."));
+        entity.IsDeleted = true;
+        await db.SaveChangesAsync(cancellationToken);
+        return Result.Success();
+    }
+}
+
+public sealed class UpdateSubjectCommandHandler(EduSyncDbContext db)
+    : IRequestHandler<UpdateSubjectCommand, Result<SubjectDto>>
+{
+    public async Task<Result<SubjectDto>> Handle(UpdateSubjectCommand request, CancellationToken cancellationToken)
+    {
+        var entity = await db.Subjects.FirstOrDefaultAsync(s => s.ExternalId == request.ExternalId && !s.IsDeleted, cancellationToken);
+        if (entity is null) return Result<SubjectDto>.Failure(Error.NotFound("Subject not found."));
+
+        var body = request.Request;
+        if (body.Name is not null) entity.Name = body.Name.Trim();
+        if (body.Code is not null) entity.Code = body.Code.Trim();
+        if (body.Class is not null) entity.ClassName = body.Class.Trim();
+        if (body.TeacherId is not null) entity.TeacherExternalId = body.TeacherId;
+        if (body.TeacherName is not null) entity.TeacherName = body.TeacherName;
+        if (body.WeeklyHours.HasValue) entity.WeeklyHours = body.WeeklyHours.Value;
+        if (body.Status is not null) entity.Status = body.Status;
+        await db.SaveChangesAsync(cancellationToken);
+        return Result<SubjectDto>.Success(AcademicsMapping.ToDto(entity));
+    }
+}
+
+public sealed class DeleteSubjectCommandHandler(EduSyncDbContext db)
+    : IRequestHandler<DeleteSubjectCommand, Result>
+{
+    public async Task<Result> Handle(DeleteSubjectCommand request, CancellationToken cancellationToken)
+    {
+        var entity = await db.Subjects.FirstOrDefaultAsync(s => s.ExternalId == request.ExternalId && !s.IsDeleted, cancellationToken);
+        if (entity is null) return Result.Failure(Error.NotFound("Subject not found."));
+        entity.IsDeleted = true;
+        await db.SaveChangesAsync(cancellationToken);
+        return Result.Success();
+    }
+}

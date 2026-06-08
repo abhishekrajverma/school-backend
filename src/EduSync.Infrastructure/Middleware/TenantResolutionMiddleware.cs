@@ -18,6 +18,8 @@ public sealed class TenantResolutionMiddleware(RequestDelegate next)
         "/api/auth/login",
         "/api/auth/refresh",
         "/api/tenants/provision",
+        "/api/enquiries",
+        "/api/company",
         "/swagger",
         "/openapi",
         "/hangfire",
@@ -61,9 +63,12 @@ public sealed class TenantResolutionMiddleware(RequestDelegate next)
             return;
         }
 
-        if (tenant.Status == TenantStatus.Suspended)
+        if (tenant.Status != TenantStatus.Active)
         {
-            await WriteForbiddenAsync(context, "Tenant is suspended.");
+            var message = tenant.Status == TenantStatus.Suspended
+                ? "School suspended."
+                : "School not active yet.";
+            await WriteForbiddenAsync(context, message);
             return;
         }
 
@@ -104,7 +109,7 @@ public sealed class TenantResolutionMiddleware(RequestDelegate next)
         }
 
         var tenant = await ResolveTenantAsync(tenantCache, tenantHeader.Trim(), null, cancellationToken);
-        if (tenant is not null && tenant.Status != TenantStatus.Suspended)
+        if (tenant is not null && tenant.Status == TenantStatus.Active)
         {
             tenantContext.Set(tenant.Id, tenant.Slug, tenant.ExternalId);
         }

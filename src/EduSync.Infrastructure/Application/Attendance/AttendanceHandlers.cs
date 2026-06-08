@@ -17,12 +17,16 @@ internal static class AttendanceMapping
         r.Date.ToString("yyyy-MM-dd"), r.Status, r.CheckIn, r.CheckOut, r.Remarks);
 }
 
-public sealed class ListAttendanceQueryHandler(EduSyncDbContext db)
+public sealed class ListAttendanceQueryHandler(EduSyncDbContext db, IFinancialYearContext financialYear)
     : IRequestHandler<ListAttendanceQuery, Result<PaginatedList<AttendanceRecordDto>>>
 {
     public async Task<Result<PaginatedList<AttendanceRecordDto>>> Handle(ListAttendanceQuery request, CancellationToken ct)
     {
         var query = db.AttendanceRecords.AsNoTracking().Where(a => !a.IsDeleted);
+        if (financialYear.IsResolved)
+        {
+            query = query.Where(a => a.FinancialYear == financialYear.FinancialYear);
+        }
         if (DateOnly.TryParse(request.Date, out var date)) query = query.Where(a => a.Date == date);
         if (!string.IsNullOrWhiteSpace(request.EntityType)) query = query.Where(a => a.EntityType == request.EntityType);
         if (!string.IsNullOrWhiteSpace(request.ClassName)) query = query.Where(a => a.ClassName == request.ClassName);
@@ -40,19 +44,27 @@ public sealed class ListAttendanceQueryHandler(EduSyncDbContext db)
     }
 }
 
-public sealed class GetAttendanceByIdQueryHandler(EduSyncDbContext db)
+public sealed class GetAttendanceByIdQueryHandler(EduSyncDbContext db, IFinancialYearContext financialYear)
     : IRequestHandler<GetAttendanceByIdQuery, Result<AttendanceRecordDto>>
 {
     public async Task<Result<AttendanceRecordDto>> Handle(GetAttendanceByIdQuery request, CancellationToken ct)
     {
-        var r = await db.AttendanceRecords.AsNoTracking()
-            .FirstOrDefaultAsync(a => a.ExternalId == request.ExternalId && !a.IsDeleted, ct);
+        var query = db.AttendanceRecords.AsNoTracking().Where(a => a.ExternalId == request.ExternalId && !a.IsDeleted);
+        if (financialYear.IsResolved)
+        {
+            query = query.Where(a => a.FinancialYear == financialYear.FinancialYear);
+        }
+
+        var r = await query.FirstOrDefaultAsync(ct);
         return r is null ? Result<AttendanceRecordDto>.Failure(Error.NotFound("Record not found."))
             : Result<AttendanceRecordDto>.Success(AttendanceMapping.ToDto(r));
     }
 }
 
-public sealed class MarkAttendanceCommandHandler(EduSyncDbContext db, ITenantContext tenant)
+public sealed class MarkAttendanceCommandHandler(
+    EduSyncDbContext db,
+    ITenantContext tenant,
+    IFinancialYearContext financialYear)
     : IRequestHandler<MarkAttendanceCommand, Result<AttendanceRecordDto>>
 {
     public async Task<Result<AttendanceRecordDto>> Handle(MarkAttendanceCommand request, CancellationToken ct)
@@ -81,6 +93,7 @@ public sealed class MarkAttendanceCommandHandler(EduSyncDbContext db, ITenantCon
         {
             Id = Guid.NewGuid(),
             TenantId = tenant.TenantId.Value,
+            FinancialYear = financialYear.FinancialYear ?? FinancialYearDefaults.Demo,
             ExternalId = Guid.NewGuid().ToString("N")[..12],
             EntityType = body.EntityType,
             EntityExternalId = body.EntityId,
@@ -116,13 +129,17 @@ public sealed class BulkMarkAttendanceCommandHandler(ISender sender)
     }
 }
 
-public sealed class GetStudentAttendanceQueryHandler(EduSyncDbContext db)
+public sealed class GetStudentAttendanceQueryHandler(EduSyncDbContext db, IFinancialYearContext financialYear)
     : IRequestHandler<GetStudentAttendanceQuery, Result<IReadOnlyList<AttendanceRecordDto>>>
 {
     public async Task<Result<IReadOnlyList<AttendanceRecordDto>>> Handle(GetStudentAttendanceQuery request, CancellationToken ct)
     {
         var query = db.AttendanceRecords.AsNoTracking()
             .Where(a => !a.IsDeleted && a.EntityType == "student" && a.EntityExternalId == request.StudentId);
+        if (financialYear.IsResolved)
+        {
+            query = query.Where(a => a.FinancialYear == financialYear.FinancialYear);
+        }
         if (request.From.HasValue) query = query.Where(a => a.Date >= request.From.Value);
         if (request.To.HasValue) query = query.Where(a => a.Date <= request.To.Value);
         var items = await query.OrderByDescending(a => a.Date).ToListAsync(ct);

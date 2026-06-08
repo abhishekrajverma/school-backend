@@ -1,4 +1,5 @@
 using EduSync.Infrastructure.Persistence;
+using EduSync.Infrastructure.Tenancy;
 using EduSync.Modules.Identity.Application.Abstractions;
 using EduSync.Modules.Identity.Application.Commands;
 using EduSync.Modules.Identity.Application.Dtos;
@@ -28,19 +29,6 @@ public sealed class RefreshTokenCommandHandler(
         }
 
         existing.RevokedAt = DateTime.UtcNow;
-        var membership = existing.User.Memberships.FirstOrDefault(m => m.IsActive);
-        if (membership is null)
-        {
-            return Result<LoginResponse>.Failure(Error.Forbidden("No active tenant membership."));
-        }
-
-        var tenant = await db.Tenants.AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == membership.TenantId, cancellationToken);
-        if (tenant is null || tenant.Status == TenantStatus.Suspended)
-        {
-            return Result<LoginResponse>.Failure(Error.Forbidden("Tenant is not available."));
-        }
-
         var refreshPlain = jwtTokenService.GenerateRefreshToken();
         var replacement = new RefreshToken
         {
@@ -53,6 +41,31 @@ public sealed class RefreshTokenCommandHandler(
         };
         db.RefreshTokens.Add(replacement);
         await db.SaveChangesAsync(cancellationToken);
+
+        if (string.Equals(existing.User.Role, UserRoles.Company, StringComparison.OrdinalIgnoreCase))
+        {
+            var (companyToken, companyExpires) = jwtTokenService.CreateAccessToken(
+                existing.User, Guid.Empty, "platform", UserRoles.Company);
+            return Result<LoginResponse>.Success(new LoginResponse(
+                companyToken,
+                refreshPlain,
+                companyExpires,
+                AuthUserMapper.ToCompanyDto(existing.User)));
+        }
+
+        var membership = existing.User.Memberships.FirstOrDefault(m => m.IsActive);
+        if (membership is null)
+        {
+            return Result<LoginResponse>.Failure(Error.Forbidden("No active tenant membership."));
+        }
+
+        var tenant = await db.Tenants.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == membership.TenantId, cancellationToken);
+        var tenantGuard = TenantLoginGuard.ValidateForLogin(tenant);
+        if (tenantGuard is not null)
+        {
+            return Result<LoginResponse>.Failure(tenantGuard.Error!);
+        }
 
         var (accessToken, expiresIn) = jwtTokenService.CreateAccessToken(
             existing.User, tenant.Id, tenant.ExternalId, membership.Role);

@@ -23,6 +23,7 @@ using EduSync.Modules.Identity.Domain;
 using EduSync.Modules.Parents.Domain;
 using EduSync.Modules.Staff.Domain;
 using EduSync.Modules.Students.Domain;
+using EduSync.Modules.Company.Domain;
 using EduSync.Modules.Tenancy.Domain;
 using EduSync.SharedKernel.Abstractions;
 using EduSync.SharedKernel.Entities;
@@ -70,6 +71,7 @@ public sealed class EduSyncDbContext(
     public DbSet<WebhookSubscription> WebhookSubscriptions => Set<WebhookSubscription>();
     public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
     public DbSet<RetentionPolicy> RetentionPolicies => Set<RetentionPolicy>();
+    public DbSet<SchoolEnquiry> SchoolEnquiries => Set<SchoolEnquiry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

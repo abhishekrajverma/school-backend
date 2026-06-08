@@ -14,4 +14,13 @@ internal static class AuthUserMapper
             membership.Role,
             tenantExternalId,
             RolePermissions.GetPermissionsForRole(membership.Role));
+
+    public static AuthUserDto ToCompanyDto(User user) =>
+        new(
+            user.ExternalId,
+            user.Name,
+            user.Email,
+            UserRoles.Company,
+            string.Empty,
+            RolePermissions.GetPermissionsForRole(UserRoles.Company));
 }

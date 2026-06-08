@@ -33,30 +33,48 @@ public sealed class GetStudentPortalProfileQueryHandler(EduSyncDbContext db, ICu
     }
 }
 
-public sealed class GetStudentPortalFeesQueryHandler(EduSyncDbContext db, ICurrentUserContext user)
+public sealed class GetStudentPortalFeesQueryHandler(
+    EduSyncDbContext db,
+    ICurrentUserContext user,
+    IFinancialYearContext financialYear)
     : IRequestHandler<GetStudentPortalFeesQuery, Result<object>>
 {
     public async Task<Result<object>> Handle(GetStudentPortalFeesQuery request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(user.UserExternalId))
             return Result<object>.Failure(Error.Forbidden("Authenticated user required."));
-        var fees = await db.FeeInvoices.AsNoTracking()
-            .Where(f => f.StudentExternalId == user.UserExternalId && !f.IsDeleted)
+        var query = db.FeeInvoices.AsNoTracking()
+            .Where(f => f.StudentExternalId == user.UserExternalId && !f.IsDeleted);
+        if (financialYear.IsResolved)
+        {
+            query = query.Where(f => f.FinancialYear == financialYear.FinancialYear);
+        }
+
+        var fees = await query
             .Select(f => new { f.ExternalId, f.InvoiceNo, f.TotalFee, f.Paid, f.Pending, f.Status, f.DueDate })
             .ToListAsync(ct);
         return Result<object>.Success(fees);
     }
 }
 
-public sealed class GetStudentPortalAttendanceQueryHandler(EduSyncDbContext db, ICurrentUserContext user)
+public sealed class GetStudentPortalAttendanceQueryHandler(
+    EduSyncDbContext db,
+    ICurrentUserContext user,
+    IFinancialYearContext financialYear)
     : IRequestHandler<GetStudentPortalAttendanceQuery, Result<object>>
 {
     public async Task<Result<object>> Handle(GetStudentPortalAttendanceQuery request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(user.UserExternalId))
             return Result<object>.Failure(Error.Forbidden("Authenticated user required."));
-        var records = await db.AttendanceRecords.AsNoTracking()
-            .Where(a => a.EntityExternalId == user.UserExternalId && !a.IsDeleted)
+        var query = db.AttendanceRecords.AsNoTracking()
+            .Where(a => a.EntityExternalId == user.UserExternalId && !a.IsDeleted);
+        if (financialYear.IsResolved)
+        {
+            query = query.Where(a => a.FinancialYear == financialYear.FinancialYear);
+        }
+
+        var records = await query
             .OrderByDescending(a => a.Date)
             .Select(a => new { a.ExternalId, a.Date, a.Status, a.CheckIn, a.CheckOut, a.Remarks })
             .Take(60).ToListAsync(ct);
@@ -233,28 +251,43 @@ public sealed class GetParentPortalChildrenQueryHandler(EduSyncDbContext db, ICu
     }
 }
 
-public sealed class GetParentPortalChildFeesQueryHandler(EduSyncDbContext db, ICurrentUserContext user)
+public sealed class GetParentPortalChildFeesQueryHandler(
+    EduSyncDbContext db,
+    ICurrentUserContext user,
+    IFinancialYearContext financialYear)
     : IRequestHandler<GetParentPortalChildFeesQuery, Result<object>>
 {
     public async Task<Result<object>> Handle(GetParentPortalChildFeesQuery request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(user.UserExternalId) && user.UserId is null)
             return Result<object>.Failure(Error.Forbidden("Authenticated user required."));
-        var fees = await db.FeeInvoices.AsNoTracking()
-            .Where(f => f.StudentExternalId == request.ChildId && !f.IsDeleted)
+        var query = db.FeeInvoices.AsNoTracking()
+            .Where(f => f.StudentExternalId == request.ChildId && !f.IsDeleted);
+        if (financialYear.IsResolved)
+        {
+            query = query.Where(f => f.FinancialYear == financialYear.FinancialYear);
+        }
+
+        var fees = await query
             .Select(f => new { f.ExternalId, f.InvoiceNo, f.TotalFee, f.Paid, f.Pending, f.Status })
             .ToListAsync(ct);
         return Result<object>.Success(fees);
     }
 }
 
-public sealed class GetParentPortalChildAttendanceQueryHandler(EduSyncDbContext db)
+public sealed class GetParentPortalChildAttendanceQueryHandler(EduSyncDbContext db, IFinancialYearContext financialYear)
     : IRequestHandler<GetParentPortalChildAttendanceQuery, Result<object>>
 {
     public async Task<Result<object>> Handle(GetParentPortalChildAttendanceQuery request, CancellationToken ct)
     {
-        var records = await db.AttendanceRecords.AsNoTracking()
-            .Where(a => a.EntityExternalId == request.ChildId && !a.IsDeleted)
+        var query = db.AttendanceRecords.AsNoTracking()
+            .Where(a => a.EntityExternalId == request.ChildId && !a.IsDeleted);
+        if (financialYear.IsResolved)
+        {
+            query = query.Where(a => a.FinancialYear == financialYear.FinancialYear);
+        }
+
+        var records = await query
             .OrderByDescending(a => a.Date)
             .Select(a => new { a.Date, a.Status, a.Remarks })
             .Take(30).ToListAsync(ct);

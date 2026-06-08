@@ -10,18 +10,18 @@ public sealed class DashboardCache(IDistributedCache cache, IOptions<RedisOption
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private readonly RedisOptions _options = redisOptions.Value;
 
-    public async Task<DashboardResponseDto?> GetAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<DashboardResponseDto?> GetAsync(Guid tenantId, string financialYear, CancellationToken cancellationToken = default)
     {
         if (!_options.Enabled)
         {
             return null;
         }
 
-        var json = await cache.GetStringAsync($"dashboard:{tenantId:N}", cancellationToken);
+        var json = await cache.GetStringAsync(CacheKey(tenantId, financialYear), cancellationToken);
         return json is null ? null : JsonSerializer.Deserialize<DashboardResponseDto>(json, JsonOptions);
     }
 
-    public async Task SetAsync(Guid tenantId, DashboardResponseDto dto, CancellationToken cancellationToken = default)
+    public async Task SetAsync(Guid tenantId, string financialYear, DashboardResponseDto dto, CancellationToken cancellationToken = default)
     {
         if (!_options.Enabled)
         {
@@ -29,7 +29,7 @@ public sealed class DashboardCache(IDistributedCache cache, IOptions<RedisOption
         }
 
         await cache.SetStringAsync(
-            $"dashboard:{tenantId:N}",
+            CacheKey(tenantId, financialYear),
             JsonSerializer.Serialize(dto, JsonOptions),
             new DistributedCacheEntryOptions
             {
@@ -37,4 +37,7 @@ public sealed class DashboardCache(IDistributedCache cache, IOptions<RedisOption
             },
             cancellationToken);
     }
+
+    private static string CacheKey(Guid tenantId, string financialYear) =>
+        $"dashboard:{tenantId:N}:{financialYear}";
 }

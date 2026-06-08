@@ -40,7 +40,7 @@ public sealed class ProvisionTenantCommandHandler(
             ExternalId = externalId,
             Slug = slug,
             Name = request.SchoolName.Trim(),
-            Status = TenantStatus.Active,
+            Status = TenantStatus.Provisioning,
             CreatedAt = DateTime.UtcNow,
             Subscription = new TenantSubscription
             {

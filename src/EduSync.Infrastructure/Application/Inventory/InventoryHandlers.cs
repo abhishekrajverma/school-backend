@@ -89,3 +89,16 @@ public sealed class UpdateInventoryItemCommandHandler(EduSyncDbContext db)
         return Result<InventoryItemDto>.Success(InventoryMapping.ToDto(item));
     }
 }
+
+public sealed class DeleteInventoryItemCommandHandler(EduSyncDbContext db)
+    : IRequestHandler<DeleteInventoryItemCommand, Result>
+{
+    public async Task<Result> Handle(DeleteInventoryItemCommand request, CancellationToken ct)
+    {
+        var item = await db.InventoryItems.FirstOrDefaultAsync(x => x.ExternalId == request.ExternalId && !x.IsDeleted, ct);
+        if (item is null) return Result.Failure(Error.NotFound("Item not found."));
+        item.IsDeleted = true;
+        await db.SaveChangesAsync(ct);
+        return Result.Success();
+    }
+}

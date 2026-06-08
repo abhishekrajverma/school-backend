@@ -69,6 +69,39 @@ public sealed class CreateHostelRoomCommandHandler(EduSyncDbContext db, ITenantC
     }
 }
 
+public sealed class UpdateHostelRoomCommandHandler(EduSyncDbContext db)
+    : IRequestHandler<UpdateHostelRoomCommand, Result<HostelRoomDto>>
+{
+    public async Task<Result<HostelRoomDto>> Handle(UpdateHostelRoomCommand request, CancellationToken ct)
+    {
+        var room = await db.HostelRooms.FirstOrDefaultAsync(x => x.ExternalId == request.ExternalId && !x.IsDeleted, ct);
+        if (room is null) return Result<HostelRoomDto>.Failure(Error.NotFound("Room not found."));
+        var b = request.Request;
+        if (b.RoomNo is not null) room.RoomNo = b.RoomNo;
+        if (b.Block is not null) room.Block = b.Block;
+        if (b.Capacity.HasValue) room.Capacity = b.Capacity.Value;
+        if (b.Floor.HasValue) room.Floor = b.Floor.Value;
+        if (b.Warden is not null) room.Warden = b.Warden;
+        if (b.MonthlyFee.HasValue) room.MonthlyFee = b.MonthlyFee.Value;
+        if (b.Status is not null) room.Status = b.Status;
+        await db.SaveChangesAsync(ct);
+        return Result<HostelRoomDto>.Success(HostelMapping.ToDto(room));
+    }
+}
+
+public sealed class DeleteHostelRoomCommandHandler(EduSyncDbContext db)
+    : IRequestHandler<DeleteHostelRoomCommand, Result>
+{
+    public async Task<Result> Handle(DeleteHostelRoomCommand request, CancellationToken ct)
+    {
+        var room = await db.HostelRooms.FirstOrDefaultAsync(x => x.ExternalId == request.ExternalId && !x.IsDeleted, ct);
+        if (room is null) return Result.Failure(Error.NotFound("Room not found."));
+        room.IsDeleted = true;
+        await db.SaveChangesAsync(ct);
+        return Result.Success();
+    }
+}
+
 public sealed class ListHostelAllocationsQueryHandler(EduSyncDbContext db)
     : IRequestHandler<ListHostelAllocationsQuery, Result<PaginatedList<HostelAllocationDto>>>
 {

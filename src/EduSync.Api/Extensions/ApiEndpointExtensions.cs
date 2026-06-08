@@ -37,5 +37,8 @@ public static class ApiEndpointExtensions
         app.MapChaosEndpoints();
         app.MapVersionEndpoints();
         app.MapRetentionEndpoints();
+        app.MapCompanyEndpoints();
+        app.MapEnquiryEndpoints();
+        app.MapFinancialYearEndpoints();
     }
 }

@@ -3,6 +3,7 @@ using EduSync.Api.Extensions;
 using EduSync.Infrastructure.Persistence;
 
 using EduSync.Infrastructure.Tenancy;
+using EduSync.Modules.Tenancy.Domain;
 
 using EduSync.Modules.Identity.Authorization;
 
@@ -101,7 +102,7 @@ public static class TenantEndpoints
         {
 
             var tenant = await db.Tenants.AsNoTracking()
-
+                .Include(t => t.Subscription)
                 .FirstOrDefaultAsync(t => t.ExternalId == id || t.Slug == id);
 
             if (tenant is null)
@@ -130,7 +131,9 @@ public static class TenantEndpoints
 
                 logoUrl = tenant.LogoUrl,
 
-                status = tenant.Status.ToString().ToLowerInvariant(),
+                status = TenantStatusMapper.ToApiStatus(tenant.Status),
+                schoolEmail = tenant.SchoolEmail,
+                planKey = tenant.Subscription?.PlanId,
 
             });
 

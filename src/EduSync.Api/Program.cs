@@ -119,6 +119,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<TenantRateLimitMiddleware>();
 app.UseMiddleware<TenantResolutionMiddleware>();
+app.UseMiddleware<FinancialYearResolutionMiddleware>();
 app.UseMiddleware<AuditLoggingMiddleware>();
 
 if (builder.Configuration.GetValue<bool>("ScheduledJobs:UseHangfire"))

@@ -74,6 +74,54 @@ public static class AcademicsEndpoints
 
 
 
+        group.MapPut("/classes/{id}", async (string id, UpdateClassRequest body, ISender sender) =>
+
+        {
+
+            var result = await sender.Send(new UpdateClassCommand(id, body));
+
+            return result.ToHttpResult(dto => Results.Ok(dto));
+
+        }).RequirePermission(Permissions.AcademicsWrite);
+
+
+
+        group.MapDelete("/classes/{id}", async (string id, ISender sender) =>
+
+        {
+
+            var result = await sender.Send(new DeleteClassCommand(id));
+
+            return result.ToHttpResult();
+
+        }).RequirePermission(Permissions.AcademicsWrite);
+
+
+
+        group.MapPut("/subjects/{id}", async (string id, UpdateSubjectRequest body, ISender sender) =>
+
+        {
+
+            var result = await sender.Send(new UpdateSubjectCommand(id, body));
+
+            return result.ToHttpResult(dto => Results.Ok(dto));
+
+        }).RequirePermission(Permissions.AcademicsWrite);
+
+
+
+        group.MapDelete("/subjects/{id}", async (string id, ISender sender) =>
+
+        {
+
+            var result = await sender.Send(new DeleteSubjectCommand(id));
+
+            return result.ToHttpResult();
+
+        }).RequirePermission(Permissions.AcademicsWrite);
+
+
+
         return group;
 
     }

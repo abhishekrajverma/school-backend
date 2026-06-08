@@ -1,6 +1,7 @@
 using EduSync.Infrastructure.Persistence;
 using EduSync.Modules.Tenancy.Application.Dtos;
 using EduSync.Modules.Tenancy.Application.Queries;
+using EduSync.Modules.Tenancy.Domain;
 using EduSync.SharedKernel.Results;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -27,8 +28,9 @@ public sealed class GetCurrentTenantQueryHandler(IReadDbContextFactory dbFactory
             tenant.ExternalId,
             tenant.Slug,
             tenant.Name,
+            tenant.SchoolEmail,
             tenant.LogoUrl,
-            tenant.Status.ToString().ToLowerInvariant(),
+            TenantStatusMapper.ToApiStatus(tenant.Status),
             tenant.Subscription?.PlanId ?? "starter",
             tenant.Subscription?.SeatLimit ?? 50,
             tenant.Subscription?.ExpiresAt));

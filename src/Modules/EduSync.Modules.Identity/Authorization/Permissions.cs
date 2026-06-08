@@ -76,6 +76,14 @@ public static class Permissions
     public const string ChaosRead = "chaos.read";
 
     public const string TenantsRead = "tenants.read";
+    public const string TenantsManage = "tenants.manage";
+
+    public const string CompanyRead = "company.read";
+    public const string EnquiriesRead = "enquiries.read";
+    public const string EnquiriesManage = "enquiries.manage";
+
+    public const string FinancialYearRead = "financial-year.read";
+    public const string FinancialYearWrite = "financial-year.write";
 
     public const string PortalStudent = "portal.student";
     public const string PortalTeacher = "portal.teacher";
@@ -103,7 +111,9 @@ public static class Permissions
         UploadsRead, UploadsWrite,
         JobsRun, ImportsRun,
         EventsRead, AuditRead, WebhooksManage, RetentionManage, ChaosRead,
-        TenantsRead,
+        TenantsRead, TenantsManage,
+        CompanyRead, EnquiriesRead, EnquiriesManage,
+        FinancialYearRead, FinancialYearWrite,
         PortalStudent, PortalTeacher, PortalParent,
     ];
 

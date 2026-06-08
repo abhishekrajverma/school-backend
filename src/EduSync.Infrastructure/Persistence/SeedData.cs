@@ -9,10 +9,12 @@ using EduSync.Modules.Parents.Domain;
 using EduSync.Modules.Staff.Application;
 using EduSync.Modules.Staff.Domain;
 using EduSync.Modules.Students.Domain;
+using EduSync.Modules.Company.Domain;
 using EduSync.Modules.Tenancy.Domain;
 using EduSync.Infrastructure.Application.Admissions;
 using EduSync.Infrastructure.Application.Timetable;
 using EduSync.Infrastructure.Tenancy;
+using FinancialYearDefaults = EduSync.Infrastructure.Tenancy.FinancialYearDefaults;
 using EduSync.Modules.Attendance.Domain;
 using EduSync.Modules.Exams.Domain;
 using EduSync.Modules.Fees.Domain;
@@ -36,6 +38,8 @@ public static class SeedData
     public static readonly Guid DemoTenantGuid = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1");
     public const string DemoTenantExternalId = "demo-school-001";
     public const string DemoTenantSlug = "demo-school";
+    public const string AdminEmail = "admin@school.edu";
+    public const string AdminPassword = "admin123";
 
     public static async Task InitializeAsync(IServiceProvider services, CancellationToken cancellationToken = default)
     {
@@ -54,6 +58,9 @@ public static class SeedData
             await SeedPhase3IfMissingAsync(db, DemoTenantGuid, cancellationToken);
             await SeedPhase4IfMissingAsync(db, DemoTenantGuid, cancellationToken);
             await SeedPhase5IfMissingAsync(db, DemoTenantGuid, cancellationToken);
+            await SeedEnquiriesIfMissingAsync(db, cancellationToken);
+            await SeedFinancialYearsIfMissingAsync(db, DemoTenantGuid, cancellationToken);
+            await EnsureAdminOnlyLoginAsync(db, passwordHasher, DemoTenantGuid, cancellationToken);
             return;
         }
 
@@ -65,6 +72,7 @@ public static class SeedData
             ExternalId = DemoTenantExternalId,
             Slug = DemoTenantSlug,
             Name = "Demo International School",
+            SchoolEmail = "admin@school.edu",
             Status = TenantStatus.Active,
             CreatedAt = DateTime.UtcNow,
             Subscription = new TenantSubscription
@@ -78,38 +86,190 @@ public static class SeedData
         };
 
         db.Tenants.Add(tenant);
-        db.AcademicYears.Add(new AcademicYear
-        {
-            Id = Guid.NewGuid(),
-            TenantId = DemoTenantGuid,
-            Name = "2025-26",
-            StartDate = new DateOnly(2025, 4, 1),
-            EndDate = new DateOnly(2026, 3, 31),
-            IsCurrent = true,
-        });
-
-        var users = CreateDemoUsers(passwordHasher);
-        foreach (var user in users)
-        {
-            user.Memberships.Add(new TenantMembership
+        db.AcademicYears.AddRange(
+            new AcademicYear
             {
                 Id = Guid.NewGuid(),
                 TenantId = DemoTenantGuid,
-                UserId = user.Id,
-                Role = user.Role,
-                IsActive = true,
-                JoinedAt = DateTime.UtcNow,
+                Name = FinancialYearDefaults.Demo,
+                StartDate = new DateOnly(2024, 4, 1),
+                EndDate = new DateOnly(2025, 3, 31),
+                IsCurrent = true,
+            },
+            new AcademicYear
+            {
+                Id = Guid.NewGuid(),
+                TenantId = DemoTenantGuid,
+                Name = "2025-26",
+                StartDate = new DateOnly(2025, 4, 1),
+                EndDate = new DateOnly(2026, 3, 31),
+                IsCurrent = false,
             });
-        }
 
-        db.Users.AddRange(users);
+        var admin = CreateAdminUser(passwordHasher);
+        admin.Memberships.Add(new TenantMembership
+        {
+            Id = Guid.NewGuid(),
+            TenantId = DemoTenantGuid,
+            UserId = admin.Id,
+            Role = UserRoles.Admin,
+            IsActive = true,
+            JoinedAt = DateTime.UtcNow,
+        });
+        db.Users.Add(admin);
         db.Students.AddRange(CreateDemoStudents(DemoTenantGuid));
         await SeedPhase2IfMissingAsync(db, DemoTenantGuid, cancellationToken);
         await SeedPhase3IfMissingAsync(db, DemoTenantGuid, cancellationToken);
         await SeedPhase4IfMissingAsync(db, DemoTenantGuid, cancellationToken);
         await SeedPhase5IfMissingAsync(db, DemoTenantGuid, cancellationToken);
 
+        await SeedEnquiriesIfMissingAsync(db, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task EnsureAdminOnlyLoginAsync(
+        EduSyncDbContext db,
+        IPasswordHasher passwordHasher,
+        Guid tenantId,
+        CancellationToken cancellationToken)
+    {
+        var normalizedAdmin = AdminEmail.ToLowerInvariant();
+        var admin = await db.Users
+            .Include(u => u.Memberships)
+            .FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedAdmin, cancellationToken);
+
+        if (admin is null)
+        {
+            admin = CreateAdminUser(passwordHasher);
+            admin.Memberships.Add(new TenantMembership
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                UserId = admin.Id,
+                Role = UserRoles.Admin,
+                IsActive = true,
+                JoinedAt = DateTime.UtcNow,
+            });
+            db.Users.Add(admin);
+        }
+        else
+        {
+            admin.IsActive = true;
+            admin.Role = UserRoles.Admin;
+            if (!admin.Memberships.Any(m => m.TenantId == tenantId && m.IsActive))
+            {
+                admin.Memberships.Add(new TenantMembership
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    UserId = admin.Id,
+                    Role = UserRoles.Admin,
+                    IsActive = true,
+                    JoinedAt = DateTime.UtcNow,
+                });
+            }
+        }
+
+        var nonAdminUsers = await db.Users
+            .Where(u => u.NormalizedEmail != normalizedAdmin)
+            .ToListAsync(cancellationToken);
+
+        if (nonAdminUsers.Count == 0)
+        {
+            if (db.ChangeTracker.HasChanges())
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
+
+            return;
+        }
+
+        var nonAdminIds = nonAdminUsers.Select(u => u.Id).ToList();
+        foreach (var user in nonAdminUsers)
+        {
+            user.IsActive = false;
+        }
+
+        var memberships = await db.TenantMemberships
+            .Where(m => nonAdminIds.Contains(m.UserId) && m.IsActive)
+            .ToListAsync(cancellationToken);
+        foreach (var membership in memberships)
+        {
+            membership.IsActive = false;
+        }
+
+        var refreshTokens = await db.RefreshTokens
+            .Where(r => nonAdminIds.Contains(r.UserId) && r.RevokedAt == null && r.ExpiresAt > DateTime.UtcNow)
+            .ToListAsync(cancellationToken);
+        foreach (var token in refreshTokens)
+        {
+            token.RevokedAt = DateTime.UtcNow;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task SeedFinancialYearsIfMissingAsync(EduSyncDbContext db, Guid tenantId, CancellationToken cancellationToken)
+    {
+        if (!await db.AcademicYears.AnyAsync(y => y.TenantId == tenantId && y.Name == FinancialYearDefaults.Demo, cancellationToken))
+        {
+            foreach (var year in await db.AcademicYears.Where(y => y.TenantId == tenantId).ToListAsync(cancellationToken))
+            {
+                year.IsCurrent = false;
+            }
+
+            db.AcademicYears.Add(new AcademicYear
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                Name = FinancialYearDefaults.Demo,
+                StartDate = new DateOnly(2024, 4, 1),
+                EndDate = new DateOnly(2025, 3, 31),
+                IsCurrent = true,
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private static async Task SeedEnquiriesIfMissingAsync(EduSyncDbContext db, CancellationToken cancellationToken)
+    {
+        if (!await db.SchoolEnquiries.AnyAsync(cancellationToken))
+        {
+            db.SchoolEnquiries.AddRange(
+                new SchoolEnquiry
+                {
+                    Id = Guid.NewGuid(),
+                    ExternalId = "1",
+                    SchoolName = "Sunrise Public School",
+                    ContactName = "Priya Nair",
+                    Email = "priya@sunrisepublic.edu",
+                    Phone = "+91 98765 00001",
+                    City = "Mumbai",
+                    PlanKey = "professional",
+                    Status = EnquiryStatuses.New,
+                    CreatedAt = DateTime.UtcNow.AddDays(-3),
+                },
+                new SchoolEnquiry
+                {
+                    Id = Guid.NewGuid(),
+                    ExternalId = "2",
+                    SchoolName = "Green Valley Academy",
+                    ContactName = "Amit Verma",
+                    Email = "amit@greenvalley.edu",
+                    Phone = "+91 98765 00002",
+                    City = "Delhi",
+                    PlanKey = "starter",
+                    Status = EnquiryStatuses.Contacted,
+                    Notes = "Follow-up scheduled next week.",
+                    CreatedAt = DateTime.UtcNow.AddDays(-7),
+                    UpdatedAt = DateTime.UtcNow.AddDays(-1),
+                });
+        }
+
+        if (db.ChangeTracker.HasChanges())
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private static async Task SeedPhase2IfMissingAsync(EduSyncDbContext db, Guid tenantId, CancellationToken cancellationToken)
@@ -247,29 +407,17 @@ public static class SeedData
         return app;
     }
 
-    private static List<User> CreateDemoUsers(IPasswordHasher passwordHasher)
+    private static User CreateAdminUser(IPasswordHasher passwordHasher) => new()
     {
-        User Create(string externalId, string email, string name, string role, string password) => new()
-        {
-            Id = Guid.NewGuid(),
-            ExternalId = externalId,
-            Email = email,
-            NormalizedEmail = email.ToLowerInvariant(),
-            Name = name,
-            PasswordHash = passwordHasher.Hash(password),
-            Role = role,
-            IsActive = true,
-        };
-
-        return
-        [
-            Create("admin", "admin@school.edu", "Admin User", UserRoles.Admin, "admin123"),
-            Create("principal", "principal@school.edu", "Dr. Meera Iyer", UserRoles.Principal, "principal123"),
-            Create("2", "anita.s@school.edu", "Mrs. Anita Singh", UserRoles.Teacher, "teacher123"),
-            Create("1", "arjun.s@school.edu", "Arjun Sharma", UserRoles.Student, "student123"),
-            Create("parent-1", "rajesh.sharma@email.com", "Mr. Rajesh Sharma", UserRoles.Parent, "parent123"),
-        ];
-    }
+        Id = Guid.NewGuid(),
+        ExternalId = "admin",
+        Email = AdminEmail,
+        NormalizedEmail = AdminEmail.ToLowerInvariant(),
+        Name = "Admin User",
+        PasswordHash = passwordHasher.Hash(AdminPassword),
+        Role = UserRoles.Admin,
+        IsActive = true,
+    };
 
     private static IEnumerable<Student> CreateDemoStudents(Guid tenantId)
     {
@@ -302,6 +450,7 @@ public static class SeedData
         Id = Guid.NewGuid(),
         TenantId = tenantId,
         ExternalId = externalId,
+        FinancialYear = FinancialYearDefaults.Demo,
         FirstName = firstName,
         LastName = lastName,
         ClassName = className,
@@ -398,6 +547,7 @@ public static class SeedData
         DateOnly date, string status, string? checkIn, string? checkOut, string? remarks) => new()
     {
         Id = Guid.NewGuid(), TenantId = tenantId, ExternalId = externalId,
+        FinancialYear = FinancialYearDefaults.Demo,
         EntityType = entityType, EntityExternalId = entityId, EntityName = name, ClassName = className,
         Date = date, Status = status, CheckIn = checkIn, CheckOut = checkOut, Remarks = remarks,
     };
@@ -406,8 +556,8 @@ public static class SeedData
         Guid tenantId, string externalId, string invoiceNo, string studentId, string studentName, string className,
         decimal total, decimal paid, decimal pending, string status, string? method, DateOnly due, DateOnly? paidDate) => new()
     {
-        Id = Guid.NewGuid(), TenantId = tenantId, ExternalId = externalId, InvoiceNo = invoiceNo,
-        StudentExternalId = studentId, StudentName = studentName, ClassName = className, FeeType = "tuition",
+        Id = Guid.NewGuid(), TenantId = tenantId, ExternalId = externalId, FinancialYear = FinancialYearDefaults.Demo,
+        InvoiceNo = invoiceNo, StudentExternalId = studentId, StudentName = studentName, ClassName = className, FeeType = "tuition",
         TotalFee = total, Paid = paid, Pending = pending, Discount = 0, Fine = status == "overdue" ? 2000 : 0,
         DueDate = due, PaidDate = paidDate, Status = status, PaymentMethod = method,
     };

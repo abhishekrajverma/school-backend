@@ -270,6 +270,11 @@ namespace EduSync.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
+                    b.Property<string>("FinancialYear")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
@@ -299,6 +304,8 @@ namespace EduSync.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "ExternalId")
                         .IsUnique();
+
+                    b.HasIndex("TenantId", "FinancialYear");
 
                     b.HasIndex("TenantId", "EntityType", "EntityExternalId", "Date")
                         .IsUnique();
@@ -386,6 +393,75 @@ namespace EduSync.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "OccurredAt");
 
                     b.ToTable("Logs", "audit");
+                });
+
+            modelBuilder.Entity("EduSync.Modules.Company.Domain.SchoolEnquiry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("City")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("ContactName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("PlanKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("SchoolName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("TenantExternalId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("ExternalId")
+                        .IsUnique();
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("Enquiries", "company");
                 });
 
             modelBuilder.Entity("EduSync.Modules.Compliance.Domain.RetentionPolicy", b =>
@@ -622,6 +698,11 @@ namespace EduSync.Infrastructure.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
+                    b.Property<string>("FinancialYear")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<decimal>("Fine")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
@@ -685,6 +766,8 @@ namespace EduSync.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "ExternalId")
                         .IsUnique();
+
+                    b.HasIndex("TenantId", "FinancialYear");
 
                     b.HasIndex("TenantId", "InvoiceNo")
                         .IsUnique();
@@ -1864,6 +1947,11 @@ namespace EduSync.Infrastructure.Persistence.Migrations
                     b.Property<string>("FeeStatus")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("FinancialYear")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
                     b.Property<string>("FirstName")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -1930,6 +2018,8 @@ namespace EduSync.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "ExternalId")
                         .IsUnique();
 
+                    b.HasIndex("TenantId", "FinancialYear");
+
                     b.HasIndex("TenantId", "Status");
 
                     b.ToTable("Students", "students");
@@ -1985,6 +2075,10 @@ namespace EduSync.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("SchoolEmail")
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 

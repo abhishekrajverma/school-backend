@@ -1,4 +1,5 @@
 using EduSync.Infrastructure.Persistence;
+using EduSync.Infrastructure.Tenancy;
 using EduSync.Modules.Identity.Application.Abstractions;
 using EduSync.Modules.Identity.Application.Commands;
 using EduSync.Modules.Identity.Application.Dtos;
@@ -27,6 +28,27 @@ public sealed class LoginCommandHandler(
             return Result<LoginResponse>.Failure(Error.Unauthorized("Invalid email or password."));
         }
 
+        if (string.Equals(user.Role, UserRoles.Company, StringComparison.OrdinalIgnoreCase))
+        {
+            var (companyToken, companyExpires) = jwtTokenService.CreateAccessToken(
+                user, Guid.Empty, "platform", UserRoles.Company);
+            var companyRefresh = jwtTokenService.GenerateRefreshToken();
+            db.RefreshTokens.Add(new RefreshToken
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                TokenHash = jwtTokenService.HashToken(companyRefresh),
+                CreatedAt = DateTime.UtcNow,
+                ExpiresAt = DateTime.UtcNow.AddDays(30),
+            });
+            await db.SaveChangesAsync(cancellationToken);
+            return Result<LoginResponse>.Success(new LoginResponse(
+                companyToken,
+                companyRefresh,
+                companyExpires,
+                AuthUserMapper.ToCompanyDto(user)));
+        }
+
         var membership = user.Memberships.FirstOrDefault(m => m.IsActive);
         if (membership is null)
         {
@@ -36,9 +58,10 @@ public sealed class LoginCommandHandler(
         var tenant = await db.Tenants.AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == membership.TenantId, cancellationToken);
 
-        if (tenant is null || tenant.Status == TenantStatus.Suspended)
+        var tenantGuard = TenantLoginGuard.ValidateForLogin(tenant);
+        if (tenantGuard is not null)
         {
-            return Result<LoginResponse>.Failure(Error.Forbidden("Tenant is not available."));
+            return Result<LoginResponse>.Failure(tenantGuard.Error!);
         }
 
         var (accessToken, expiresIn) = jwtTokenService.CreateAccessToken(

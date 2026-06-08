@@ -15,6 +15,8 @@ internal sealed class FeeInvoiceConfiguration : IEntityTypeConfiguration<FeeInvo
         builder.HasIndex(x => new { x.TenantId, x.InvoiceNo }).IsUnique();
         builder.HasIndex(x => new { x.TenantId, x.StudentExternalId });
         builder.HasIndex(x => new { x.TenantId, x.Status });
+        builder.Property(x => x.FinancialYear).HasMaxLength(16).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.FinancialYear });
         builder.Property(x => x.StudentExternalId).HasMaxLength(64).IsRequired();
         builder.Property(x => x.Status).HasMaxLength(32).IsRequired();
         builder.Property(x => x.StudentName).HasMaxLength(256).IsRequired();

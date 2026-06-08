@@ -44,12 +44,16 @@ internal static class FeeMapping
     }
 }
 
-public sealed class ListFeesQueryHandler(EduSyncDbContext db)
+public sealed class ListFeesQueryHandler(EduSyncDbContext db, IFinancialYearContext financialYear)
     : IRequestHandler<ListFeesQuery, Result<PaginatedList<FeeRecordDto>>>
 {
     public async Task<Result<PaginatedList<FeeRecordDto>>> Handle(ListFeesQuery request, CancellationToken ct)
     {
         var query = db.FeeInvoices.AsNoTracking().Where(f => !f.IsDeleted);
+        if (financialYear.IsResolved)
+        {
+            query = query.Where(f => f.FinancialYear == financialYear.FinancialYear);
+        }
         if (!string.IsNullOrWhiteSpace(request.Status)) query = query.Where(f => f.Status == request.Status);
         if (!string.IsNullOrWhiteSpace(request.StudentId)) query = query.Where(f => f.StudentExternalId == request.StudentId);
         if (!string.IsNullOrWhiteSpace(request.Pagination.Search))
@@ -66,18 +70,24 @@ public sealed class ListFeesQueryHandler(EduSyncDbContext db)
     }
 }
 
-public sealed class GetFeeByIdQueryHandler(EduSyncDbContext db)
+public sealed class GetFeeByIdQueryHandler(EduSyncDbContext db, IFinancialYearContext financialYear)
     : IRequestHandler<GetFeeByIdQuery, Result<FeeRecordDto>>
 {
     public async Task<Result<FeeRecordDto>> Handle(GetFeeByIdQuery request, CancellationToken ct)
     {
-        var f = await db.FeeInvoices.AsNoTracking().FirstOrDefaultAsync(x => x.ExternalId == request.ExternalId && !x.IsDeleted, ct);
+        var query = db.FeeInvoices.AsNoTracking().Where(x => x.ExternalId == request.ExternalId && !x.IsDeleted);
+        if (financialYear.IsResolved)
+        {
+            query = query.Where(f => f.FinancialYear == financialYear.FinancialYear);
+        }
+
+        var f = await query.FirstOrDefaultAsync(ct);
         return f is null ? Result<FeeRecordDto>.Failure(Error.NotFound("Fee not found."))
             : Result<FeeRecordDto>.Success(FeeMapping.ToDto(f));
     }
 }
 
-public sealed class CreateFeeCommandHandler(EduSyncDbContext db, ITenantContext tenant)
+public sealed class CreateFeeCommandHandler(EduSyncDbContext db, ITenantContext tenant, IFinancialYearContext financialYear)
     : IRequestHandler<CreateFeeCommand, Result<FeeRecordDto>>
 {
     public async Task<Result<FeeRecordDto>> Handle(CreateFeeCommand request, CancellationToken ct)
@@ -90,6 +100,7 @@ public sealed class CreateFeeCommandHandler(EduSyncDbContext db, ITenantContext 
         {
             Id = Guid.NewGuid(),
             TenantId = tenant.TenantId.Value,
+            FinancialYear = financialYear.FinancialYear ?? FinancialYearDefaults.Demo,
             ExternalId = Guid.NewGuid().ToString("N")[..12],
             InvoiceNo = $"INV{DateTime.UtcNow:yyyy}{Random.Shared.Next(100000, 999999)}",
             StudentExternalId = body.StudentId,
@@ -107,6 +118,55 @@ public sealed class CreateFeeCommandHandler(EduSyncDbContext db, ITenantContext 
         db.FeeInvoices.Add(invoice);
         await db.SaveChangesAsync(ct);
         return Result<FeeRecordDto>.Success(FeeMapping.ToDto(invoice));
+    }
+}
+
+public sealed class UpdateFeeCommandHandler(EduSyncDbContext db, IFinancialYearContext financialYear)
+    : IRequestHandler<UpdateFeeCommand, Result<FeeRecordDto>>
+{
+    public async Task<Result<FeeRecordDto>> Handle(UpdateFeeCommand request, CancellationToken ct)
+    {
+        var query = db.FeeInvoices.Where(x => x.ExternalId == request.ExternalId && !x.IsDeleted);
+        if (financialYear.IsResolved)
+        {
+            query = query.Where(f => f.FinancialYear == financialYear.FinancialYear);
+        }
+
+        var invoice = await query.FirstOrDefaultAsync(ct);
+        if (invoice is null) return Result<FeeRecordDto>.Failure(Error.NotFound("Fee not found."));
+
+        var body = request.Request;
+        if (body.StudentName is not null) invoice.StudentName = body.StudentName;
+        if (body.Class is not null) invoice.ClassName = body.Class;
+        if (body.FeeType is not null) invoice.FeeType = body.FeeType;
+        if (body.TotalFee.HasValue) invoice.TotalFee = body.TotalFee.Value;
+        if (body.Discount.HasValue) invoice.Discount = body.Discount.Value;
+        if (body.Fine.HasValue) invoice.Fine = body.Fine.Value;
+        if (body.DueDate is not null && DateOnly.TryParse(body.DueDate, out var due)) invoice.DueDate = due;
+        if (body.Status is not null) invoice.Status = body.Status;
+        if (body.FeeItems is not null) invoice.FeeItemsJson = JsonSerializer.Serialize(body.FeeItems);
+        FeeMapping.RecalculateStatus(invoice);
+        await db.SaveChangesAsync(ct);
+        return Result<FeeRecordDto>.Success(FeeMapping.ToDto(invoice));
+    }
+}
+
+public sealed class DeleteFeeCommandHandler(EduSyncDbContext db, IFinancialYearContext financialYear)
+    : IRequestHandler<DeleteFeeCommand, Result>
+{
+    public async Task<Result> Handle(DeleteFeeCommand request, CancellationToken ct)
+    {
+        var query = db.FeeInvoices.Where(x => x.ExternalId == request.ExternalId && !x.IsDeleted);
+        if (financialYear.IsResolved)
+        {
+            query = query.Where(f => f.FinancialYear == financialYear.FinancialYear);
+        }
+
+        var invoice = await query.FirstOrDefaultAsync(ct);
+        if (invoice is null) return Result.Failure(Error.NotFound("Fee not found."));
+        invoice.IsDeleted = true;
+        await db.SaveChangesAsync(ct);
+        return Result.Success();
     }
 }
 

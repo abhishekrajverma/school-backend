@@ -18,7 +18,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EduSync.Infrastructure.Application.Students;
 
-public sealed class ListStudentsQueryHandler(IReadDbContextFactory dbFactory, IFieldEncryptionService encryption)
+public sealed class ListStudentsQueryHandler(
+    IReadDbContextFactory dbFactory,
+    IFieldEncryptionService encryption,
+    IFinancialYearContext financialYear)
     : IRequestHandler<ListStudentsQuery, Result<PaginatedList<StudentDto>>>
 {
     public async Task<Result<PaginatedList<StudentDto>>> Handle(
@@ -27,6 +30,10 @@ public sealed class ListStudentsQueryHandler(IReadDbContextFactory dbFactory, IF
     {
         await using var db = dbFactory.CreateDbContext();
         var query = db.Students.AsNoTracking().Where(s => !s.IsDeleted);
+        if (financialYear.IsResolved)
+        {
+            query = query.Where(s => s.FinancialYear == financialYear.FinancialYear);
+        }
 
         if (!string.IsNullOrWhiteSpace(request.Pagination.Search))
         {
@@ -68,13 +75,21 @@ public sealed class ListStudentsQueryHandler(IReadDbContextFactory dbFactory, IF
     }
 }
 
-public sealed class GetStudentByIdQueryHandler(EduSyncDbContext db, IFieldEncryptionService encryption)
+public sealed class GetStudentByIdQueryHandler(
+    EduSyncDbContext db,
+    IFieldEncryptionService encryption,
+    IFinancialYearContext financialYear)
     : IRequestHandler<GetStudentByIdQuery, Result<StudentDto>>
 {
     public async Task<Result<StudentDto>> Handle(GetStudentByIdQuery request, CancellationToken cancellationToken)
     {
-        var student = await db.Students.AsNoTracking()
-            .FirstOrDefaultAsync(s => s.ExternalId == request.ExternalId && !s.IsDeleted, cancellationToken);
+        var query = db.Students.AsNoTracking().Where(s => s.ExternalId == request.ExternalId && !s.IsDeleted);
+        if (financialYear.IsResolved)
+        {
+            query = query.Where(s => s.FinancialYear == financialYear.FinancialYear);
+        }
+
+        var student = await query.FirstOrDefaultAsync(cancellationToken);
 
         return student is null
             ? Result<StudentDto>.Failure(Error.NotFound("Student not found."))
@@ -88,7 +103,8 @@ public sealed class CreateStudentCommandHandler(
     IIntegrationEventCollector events,
     IRegionContext region,
     IHttpContextAccessor httpContextAccessor,
-    IFieldEncryptionService encryption)
+    IFieldEncryptionService encryption,
+    IFinancialYearContext financialYear)
     : IRequestHandler<CreateStudentCommand, Result<StudentDto>>
 {
     public async Task<Result<StudentDto>> Handle(CreateStudentCommand request, CancellationToken cancellationToken)
@@ -110,6 +126,7 @@ public sealed class CreateStudentCommandHandler(
         {
             Id = Guid.NewGuid(),
             TenantId = tenantContext.TenantId.Value,
+            FinancialYear = financialYear.FinancialYear ?? FinancialYearDefaults.Demo,
             ExternalId = Guid.NewGuid().ToString("N")[..12],
             FirstName = body.FirstName.Trim(),
             LastName = body.LastName.Trim(),

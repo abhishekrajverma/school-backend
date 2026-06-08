@@ -26,6 +26,7 @@
     <ProjectReference Include="..\Modules\EduSync.Modules.Jobs\EduSync.Modules.Jobs.csproj" />
     <ProjectReference Include="..\Modules\EduSync.Modules.Imports\EduSync.Modules.Imports.csproj" />
     <ProjectReference Include="..\Modules\EduSync.Modules.Events\EduSync.Modules.Events.csproj" />
+    <ProjectReference Include="..\Modules\EduSync.Modules.Company\EduSync.Modules.Company.csproj" />
   </ItemGroup>
 
   <ItemGroup>

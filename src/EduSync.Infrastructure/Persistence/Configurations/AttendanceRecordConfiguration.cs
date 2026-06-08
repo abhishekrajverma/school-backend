@@ -13,6 +13,8 @@ internal sealed class AttendanceRecordConfiguration : IEntityTypeConfiguration<A
         builder.Property(x => x.ExternalId).HasMaxLength(64).IsRequired();
         builder.HasIndex(x => new { x.TenantId, x.ExternalId }).IsUnique();
         builder.HasIndex(x => new { x.TenantId, x.EntityType, x.EntityExternalId, x.Date }).IsUnique();
+        builder.Property(x => x.FinancialYear).HasMaxLength(16).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.FinancialYear });
         builder.Property(x => x.RowVersion).IsRowVersion();
     }
 }

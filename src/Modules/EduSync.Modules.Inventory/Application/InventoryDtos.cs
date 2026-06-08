@@ -21,3 +21,4 @@ public sealed record ListInventoryItemsQuery(PaginationQuery Pagination, string?
 public sealed record GetInventoryItemByIdQuery(string ExternalId) : IRequest<Result<InventoryItemDto>>;
 public sealed record CreateInventoryItemCommand(CreateInventoryItemRequest Request) : IRequest<Result<InventoryItemDto>>;
 public sealed record UpdateInventoryItemCommand(string ExternalId, UpdateInventoryItemRequest Request) : IRequest<Result<InventoryItemDto>>;
+public sealed record DeleteInventoryItemCommand(string ExternalId) : IRequest<Result>;

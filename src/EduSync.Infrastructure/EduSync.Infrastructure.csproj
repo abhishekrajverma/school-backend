@@ -29,6 +29,7 @@
     <ProjectReference Include="..\Modules\EduSync.Modules.Audit\EduSync.Modules.Audit.csproj" />
     <ProjectReference Include="..\Modules\EduSync.Modules.Webhooks\EduSync.Modules.Webhooks.csproj" />
     <ProjectReference Include="..\Modules\EduSync.Modules.Compliance\EduSync.Modules.Compliance.csproj" />
+    <ProjectReference Include="..\Modules\EduSync.Modules.Company\EduSync.Modules.Company.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -24,8 +24,9 @@ public sealed record CurrentTenantDto(
     string Id,
     string Slug,
     string Name,
+    string? SchoolEmail,
     string? LogoUrl,
     string Status,
-    string PlanId,
+    string PlanKey,
     int SeatLimit,
     DateTime? ExpiresAt);

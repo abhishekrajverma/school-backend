@@ -215,3 +215,90 @@ public sealed class CreateTransportAssignmentCommandHandler(EduSyncDbContext db,
         return Result<TransportAssignmentDto>.Success(AssignmentMapping.ToDto(assignment));
     }
 }
+
+public sealed class UpdateVehicleCommandHandler(EduSyncDbContext db)
+    : IRequestHandler<UpdateVehicleCommand, Result<VehicleDto>>
+{
+    public async Task<Result<VehicleDto>> Handle(UpdateVehicleCommand request, CancellationToken ct)
+    {
+        var v = await db.Vehicles.FirstOrDefaultAsync(x => x.ExternalId == request.ExternalId && !x.IsDeleted, ct);
+        if (v is null) return Result<VehicleDto>.Failure(Error.NotFound("Vehicle not found."));
+        var b = request.Request;
+        if (b.VehicleNumber is not null) v.VehicleNumber = b.VehicleNumber;
+        if (b.VehicleType is not null) v.VehicleType = b.VehicleType;
+        if (b.Capacity.HasValue) v.Capacity = b.Capacity.Value;
+        if (b.DriverName is not null) v.DriverName = b.DriverName;
+        if (b.DriverPhone is not null) v.DriverPhone = b.DriverPhone;
+        if (b.DriverLicense is not null) v.DriverLicense = b.DriverLicense;
+        if (b.RouteId is not null)
+        {
+            v.RouteExternalId = b.RouteId;
+            var route = await db.TransportRoutes.AsNoTracking().FirstOrDefaultAsync(r => r.ExternalId == b.RouteId, ct);
+            v.RouteName = route?.RouteName;
+        }
+        if (b.InsuranceExpiry is not null && DateOnly.TryParse(b.InsuranceExpiry, out var ins)) v.InsuranceExpiry = ins;
+        if (b.FitnessExpiry is not null && DateOnly.TryParse(b.FitnessExpiry, out var fit)) v.FitnessExpiry = fit;
+        if (b.Status is not null) v.Status = b.Status;
+        await db.SaveChangesAsync(ct);
+        return Result<VehicleDto>.Success(TransportMapping.ToDto(v));
+    }
+}
+
+public sealed class DeleteVehicleCommandHandler(EduSyncDbContext db)
+    : IRequestHandler<DeleteVehicleCommand, Result>
+{
+    public async Task<Result> Handle(DeleteVehicleCommand request, CancellationToken ct)
+    {
+        var v = await db.Vehicles.FirstOrDefaultAsync(x => x.ExternalId == request.ExternalId && !x.IsDeleted, ct);
+        if (v is null) return Result.Failure(Error.NotFound("Vehicle not found."));
+        v.IsDeleted = true;
+        await db.SaveChangesAsync(ct);
+        return Result.Success();
+    }
+}
+
+public sealed class UpdateRouteCommandHandler(EduSyncDbContext db)
+    : IRequestHandler<UpdateRouteCommand, Result<TransportRouteDto>>
+{
+    public async Task<Result<TransportRouteDto>> Handle(UpdateRouteCommand request, CancellationToken ct)
+    {
+        var route = await db.TransportRoutes.FirstOrDefaultAsync(x => x.ExternalId == request.ExternalId && !x.IsDeleted, ct);
+        if (route is null) return Result<TransportRouteDto>.Failure(Error.NotFound("Route not found."));
+        var b = request.Request;
+        if (b.RouteName is not null) route.RouteName = b.RouteName;
+        if (b.VehicleId is not null)
+        {
+            route.VehicleExternalId = b.VehicleId;
+            var vehicle = await db.Vehicles.AsNoTracking().FirstOrDefaultAsync(v => v.ExternalId == b.VehicleId, ct);
+            route.VehicleNumber = vehicle?.VehicleNumber;
+        }
+        if (b.DriverName is not null) route.DriverName = b.DriverName;
+        if (b.StartPoint is not null) route.StartPoint = b.StartPoint;
+        if (b.EndPoint is not null) route.EndPoint = b.EndPoint;
+        if (b.Fare.HasValue) route.Fare = b.Fare.Value;
+        if (b.MorningTime is not null) route.MorningTime = b.MorningTime;
+        if (b.EveningTime is not null) route.EveningTime = b.EveningTime;
+        if (b.Distance is not null) route.Distance = b.Distance;
+        if (b.Status is not null) route.Status = b.Status;
+        if (b.Stops is not null)
+        {
+            route.StopsJson = TransportMapping.SerializeStops(b.Stops);
+            route.TotalStops = b.Stops.Count;
+        }
+        await db.SaveChangesAsync(ct);
+        return Result<TransportRouteDto>.Success(TransportMapping.ToDto(route));
+    }
+}
+
+public sealed class DeleteRouteCommandHandler(EduSyncDbContext db)
+    : IRequestHandler<DeleteRouteCommand, Result>
+{
+    public async Task<Result> Handle(DeleteRouteCommand request, CancellationToken ct)
+    {
+        var route = await db.TransportRoutes.FirstOrDefaultAsync(x => x.ExternalId == request.ExternalId && !x.IsDeleted, ct);
+        if (route is null) return Result.Failure(Error.NotFound("Route not found."));
+        route.IsDeleted = true;
+        await db.SaveChangesAsync(ct);
+        return Result.Success();
+    }
+}

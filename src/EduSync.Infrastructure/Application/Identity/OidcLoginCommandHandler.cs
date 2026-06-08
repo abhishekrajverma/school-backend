@@ -1,4 +1,5 @@
 using EduSync.Infrastructure.Persistence;
+using EduSync.Infrastructure.Tenancy;
 using EduSync.Infrastructure.Security;
 using EduSync.Modules.Identity.Application.Abstractions;
 using EduSync.Modules.Identity.Application.Commands;
@@ -70,9 +71,10 @@ public sealed class OidcLoginCommandHandler(
 
         var tenant = await db.Tenants.AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == membership.TenantId, cancellationToken);
-        if (tenant is null || tenant.Status == TenantStatus.Suspended)
+        var tenantGuard = TenantLoginGuard.ValidateForLogin(tenant);
+        if (tenantGuard is not null)
         {
-            return Result<LoginResponse>.Failure(Error.Forbidden("Tenant is not available."));
+            return Result<LoginResponse>.Failure(tenantGuard.Error!);
         }
 
         var (accessToken, expiresIn) = jwtTokenService.CreateAccessToken(

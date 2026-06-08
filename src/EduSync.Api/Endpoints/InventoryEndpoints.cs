@@ -80,6 +80,18 @@ public static class InventoryEndpoints
 
 
 
+        group.MapDelete("/{id}", async (string id, ISender sender) =>
+
+        {
+
+            var result = await sender.Send(new DeleteInventoryItemCommand(id));
+
+            return result.ToHttpResult();
+
+        }).RequirePermission(Permissions.InventoryWrite);
+
+
+
         return group;
 
     }

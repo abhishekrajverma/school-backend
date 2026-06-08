@@ -68,6 +68,30 @@ public static class HostelEndpoints
 
 
 
+        rooms.MapPut("/{id}", async (string id, UpdateHostelRoomRequest body, ISender sender) =>
+
+        {
+
+            var result = await sender.Send(new UpdateHostelRoomCommand(id, body));
+
+            return result.ToHttpResult(dto => Results.Ok(dto));
+
+        }).RequirePermission(Permissions.HostelWrite);
+
+
+
+        rooms.MapDelete("/{id}", async (string id, ISender sender) =>
+
+        {
+
+            var result = await sender.Send(new DeleteHostelRoomCommand(id));
+
+            return result.ToHttpResult();
+
+        }).RequirePermission(Permissions.HostelWrite);
+
+
+
         var allocations = app.MapGroup("/hostel/allocations").WithTags("Hostel");
 
 

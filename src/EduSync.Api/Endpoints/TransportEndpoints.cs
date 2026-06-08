@@ -68,6 +68,30 @@ public static class TransportEndpoints
 
 
 
+        vehicles.MapPut("/{id}", async (string id, UpdateVehicleRequest body, ISender sender) =>
+
+        {
+
+            var result = await sender.Send(new UpdateVehicleCommand(id, body));
+
+            return result.ToHttpResult(dto => Results.Ok(dto));
+
+        }).RequirePermission(Permissions.TransportWrite);
+
+
+
+        vehicles.MapDelete("/{id}", async (string id, ISender sender) =>
+
+        {
+
+            var result = await sender.Send(new DeleteVehicleCommand(id));
+
+            return result.ToHttpResult();
+
+        }).RequirePermission(Permissions.TransportWrite);
+
+
+
         var routes = app.MapGroup("/transport/routes").WithTags("Transport");
 
 
@@ -109,6 +133,30 @@ public static class TransportEndpoints
             var result = await sender.Send(new CreateRouteCommand(body));
 
             return result.ToHttpResult(dto => Results.Created($"/api/transport/routes/{dto!.Id}", dto));
+
+        }).RequirePermission(Permissions.TransportWrite);
+
+
+
+        routes.MapPut("/{id}", async (string id, UpdateRouteRequest body, ISender sender) =>
+
+        {
+
+            var result = await sender.Send(new UpdateRouteCommand(id, body));
+
+            return result.ToHttpResult(dto => Results.Ok(dto));
+
+        }).RequirePermission(Permissions.TransportWrite);
+
+
+
+        routes.MapDelete("/{id}", async (string id, ISender sender) =>
+
+        {
+
+            var result = await sender.Send(new DeleteRouteCommand(id));
+
+            return result.ToHttpResult();
 
         }).RequirePermission(Permissions.TransportWrite);
 

@@ -67,6 +67,15 @@ public static class RolePermissions
             Permissions.PortalParent,
         };
 
+        var company = new HashSet<string>(StringComparer.Ordinal)
+        {
+            Permissions.CompanyRead,
+            Permissions.EnquiriesRead,
+            Permissions.EnquiriesManage,
+            Permissions.TenantsManage,
+            Permissions.TenantsRead,
+        };
+
         return new Dictionary<string, IReadOnlySet<string>>(StringComparer.OrdinalIgnoreCase)
         {
             [UserRoles.Admin] = all,
@@ -74,6 +83,7 @@ public static class RolePermissions
             [UserRoles.Teacher] = teacher,
             [UserRoles.Student] = student,
             [UserRoles.Parent] = parent,
+            [UserRoles.Company] = company,
         };
     }
 }

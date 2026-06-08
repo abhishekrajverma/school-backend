@@ -32,13 +32,27 @@ public sealed record ListVehiclesQuery(PaginationQuery Pagination, string? Statu
     : IRequest<Result<PaginatedList<VehicleDto>>>;
 
 public sealed record GetVehicleByIdQuery(string ExternalId) : IRequest<Result<VehicleDto>>;
+public sealed record UpdateVehicleRequest(
+    string? VehicleNumber, string? VehicleType, int? Capacity,
+    string? DriverName, string? DriverPhone, string? DriverLicense,
+    string? RouteId, string? InsuranceExpiry, string? FitnessExpiry, string? Status);
+
 public sealed record CreateVehicleCommand(CreateVehicleRequest Request) : IRequest<Result<VehicleDto>>;
+public sealed record UpdateVehicleCommand(string ExternalId, UpdateVehicleRequest Request) : IRequest<Result<VehicleDto>>;
+public sealed record DeleteVehicleCommand(string ExternalId) : IRequest<Result>;
 
 public sealed record ListRoutesQuery(PaginationQuery Pagination, string? Status)
     : IRequest<Result<PaginatedList<TransportRouteDto>>>;
 
 public sealed record GetRouteByIdQuery(string ExternalId) : IRequest<Result<TransportRouteDto>>;
+public sealed record UpdateRouteRequest(
+    string? RouteName, string? VehicleId, string? DriverName, string? StartPoint, string? EndPoint,
+    decimal? Fare, string? MorningTime, string? EveningTime, string? Distance,
+    IReadOnlyList<RouteStopDto>? Stops, string? Status);
+
 public sealed record CreateRouteCommand(CreateRouteRequest Request) : IRequest<Result<TransportRouteDto>>;
+public sealed record UpdateRouteCommand(string ExternalId, UpdateRouteRequest Request) : IRequest<Result<TransportRouteDto>>;
+public sealed record DeleteRouteCommand(string ExternalId) : IRequest<Result>;
 
 public sealed record TransportAssignmentDto(
     string Id,

@@ -1,6 +1,7 @@
 using EduSync.Infrastructure.Persistence;
 using EduSync.Modules.Tenancy.Application.Dtos;
 using EduSync.Modules.Tenancy.Application.Queries;
+using EduSync.Modules.Tenancy.Domain;
 using EduSync.SharedKernel.Results;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -24,6 +25,6 @@ public sealed class GetTenantBySlugQueryHandler(EduSyncDbContext db)
             tenant.Slug,
             tenant.Name,
             tenant.LogoUrl,
-            tenant.Status.ToString().ToLowerInvariant()));
+            TenantStatusMapper.ToApiStatus(tenant.Status)));
     }
 }
