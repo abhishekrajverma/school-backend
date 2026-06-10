@@ -22,7 +22,7 @@ public static class TeacherMapping
         t.Phone,
         t.Salary,
         t.JoiningDate?.ToString("yyyy-MM-dd"),
-        t.Status,
+        t.LifecycleStatus,
         ParseClasses(t.ClassesJson),
         t.AvatarUrl);
 

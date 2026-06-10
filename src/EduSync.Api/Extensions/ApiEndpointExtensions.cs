@@ -14,9 +14,13 @@ public static class ApiEndpointExtensions
         app.MapParentEndpoints();
         app.MapAcademicsEndpoints();
         app.MapAdmissionEndpoints();
+        app.MapRegistrationEndpoints();
+        app.MapBranchEndpoints();
+        app.MapPromotionEndpoints();
         app.MapAttendanceEndpoints();
         app.MapFeesEndpoints();
         app.MapExamEndpoints();
+        app.MapAssignmentEndpoints();
         app.MapTimetableEndpoints();
         app.MapNotificationEndpoints();
         app.MapPayrollEndpoints();

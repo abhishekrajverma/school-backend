@@ -23,26 +23,35 @@ flowchart TB
         Tenants
         TenantSubscriptions
         AcademicYears
+        Branches
     end
 
     subgraph identity [identity]
         Users
         TenantMemberships
+        BranchMemberships
         RefreshTokens
     end
 
     subgraph people [people]
         students_Students
+        students_Enrollments
         staff_Teachers
+        staff_TeacherAssignments
         parents_Parents
+        parents_StudentParents
     end
 
     subgraph academics [academics + ops]
         academics_Classes
         academics_Subjects
+        admissions_Registrations
         admissions_Applications
         attendance_Records
         exams_Exams
+        exams_ExamResults
+        assignments_Assignments
+        assignments_StudentAssignments
         timetable_Entries
     end
 
@@ -528,6 +537,8 @@ erDiagram
 - Every school = row in `tenancy.Tenants`.
 - Business data filtered by **`TenantId`** (EF global query filter).
 - API sends **`X-Tenant-Id`** → resolves to `TenantId`.
+- Optional **`X-Branch-Id`** → `BranchId` for branch-scoped entities.
+- Optional **`X-Academic-Year-Id`** / **`X-Financial-Year`** → current academic year context.
 
 ### External IDs
 
@@ -543,11 +554,9 @@ erDiagram
 
 | Table | JSON field | Purpose |
 |-------|------------|---------|
-| `parents.Parents` | `ChildrenJson` | Linked students |
-| `staff.Teachers` | `ClassesJson` | Assigned classes |
+| `admissions.Applications` | `FormDataJson`, `DocumentsJson` | Application wizard (still JSON) |
 | `academics.Classes` | `SectionsJson` | Sections A/B/C |
 | `fees.Invoices` | `FeeItemsJson` | Line items |
-| `admissions.Applications` | `FormDataJson`, `DocumentsJson` | Application wizard |
 | `timetable.Entries` | `PeriodsJson` | Period schedule |
 | `transport.Routes` | `StopsJson` | Bus stops |
 
@@ -563,10 +572,87 @@ erDiagram
 | `library.Issues` | `library.Books` |
 | `hostel.Allocations` | `hostel.Rooms` |
 | `webhooks.Deliveries` | `webhooks.Subscriptions` |
+| `identity.BranchMemberships` | `tenancy.Branches`, `identity.Users` |
+| `students.Enrollments` | `students.Students` |
+| `parents.StudentParents` | `students.Students`, `parents.Parents` |
+| `assignments.StudentAssignments` | `assignments.Assignments` |
+| `admissions.AdmissionApprovals` | `admissions.Applications` |
+
+**Normalized (replaces JSON):** parent ↔ student links use `parents.StudentParents`; teacher class assignments use `staff.TeacherAssignments`; student class/section uses `students.Enrollments`.
 
 ---
 
-## 10. View in tools
+## 10. ERP core — branches, enrollments, admissions (phases 11–12)
+
+```mermaid
+erDiagram
+    Tenants ||--o{ Branches : "FK TenantId"
+    Tenants ||--o{ AcademicYears : "FK TenantId"
+    Branches ||--o{ BranchMemberships : "FK BranchId"
+    Users ||--o{ BranchMemberships : "FK UserId"
+
+    Students ||--o{ Enrollments : "FK StudentId"
+    Branches ||..o{ Enrollments : "BranchId"
+    AcademicYears ||..o{ Enrollments : "AcademicYearId"
+
+    Registrations ||..o| Applications : "RegistrationId"
+    Applications ||--o{ AdmissionApprovals : "FK"
+    Applications ||..o| Students : "ApprovedStudentExternalId"
+
+    Parents ||--o{ StudentParents : "FK ParentId"
+    Students ||--o{ StudentParents : "FK StudentId"
+
+    Exams ||..o{ ExamResults : "ExamExternalId"
+    Students ||..o{ ExamResults : "StudentExternalId"
+
+    Assignments ||--o{ StudentAssignments : "FK AssignmentId"
+    Students ||--o{ StudentAssignments : "FK StudentId"
+
+    Branches {
+        uuid Id PK
+        uuid TenantId FK
+        string ExternalId
+        string Code
+        string Name
+    }
+
+    Enrollments {
+        uuid Id PK
+        uuid StudentId FK
+        uuid BranchId
+        uuid AcademicYearId
+        string ClassName
+        string Section
+        string RollNo
+        string EnrollmentStatus
+    }
+
+    Registrations {
+        uuid Id PK
+        string RegistrationNo
+        string Status
+        uuid AcademicYearId
+    }
+
+    ExamResults {
+        uuid Id PK
+        string ExamExternalId
+        string StudentExternalId
+        decimal MarksObtained
+        string Grade
+    }
+```
+
+**Lifecycle flows**
+
+1. **Registration** → submit → (optional verify) → convert → **AdmissionApplication** (draft)
+2. **Admission** → submit → approve → **Student** + **Enrollment** + outbox `admission.approved`
+3. **Promotion** → `PromotionBatch` closes prior enrollment, opens new year enrollment
+4. **Assignments** → teacher creates → `StudentAssignment` rows per enrolled student → portal submit
+
+---
+
+## 11. View in tools
 
 - **Markdown preview** in VS Code / GitHub renders Mermaid diagrams in this file.
 - **Azure Data Studio / SSMS**: connect to DB → Database Diagrams (physical tables only).
@@ -578,3 +664,6 @@ erDiagram
 
 - [SCHEMA.md](SCHEMA.md) — table list by schema
 - [CODEBASE_GUIDE.md](CODEBASE_GUIDE.md) — where entities and handlers live
+- [ENDPOINTS.md](ENDPOINTS.md) — REST routes for branches, registrations, assignments, exam results
+
+*Last updated: phases 11–12 ERP architecture (branches, enrollments, exam results, assignments).*

@@ -1,10 +1,13 @@
+using EduSync.SharedKernel.Abstractions;
+
 namespace EduSync.Modules.Events.Domain;
 
-public sealed class OutboxMessage
+public sealed class OutboxMessage : ITenantEntity
 {
     public Guid Id { get; set; }
     public string ExternalId { get; set; } = string.Empty;
-    public Guid? TenantId { get; set; }
+    Guid ITenantEntity.TenantId => TenantId;
+    public Guid TenantId { get; set; }
     public string EventType { get; set; } = string.Empty;
     public string Payload { get; set; } = "{}";
     public string? Region { get; set; }
@@ -27,5 +30,8 @@ public static class IntegrationEventTypes
 {
     public const string NotificationCreated = "notification.created";
     public const string StudentCreated = "student.created";
+    public const string StudentEnrolled = "student.enrolled";
     public const string FeePaymentRecorded = "fee.payment.recorded";
+    public const string AdmissionApproved = "admission.approved";
+    public const string RegistrationSubmitted = "registration.submitted";
 }

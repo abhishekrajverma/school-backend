@@ -41,6 +41,8 @@ public static class RolePermissions
             Permissions.AttendanceWrite,
             Permissions.ExamsRead,
             Permissions.ExamsWrite,
+            Permissions.AssignmentsRead,
+            Permissions.AssignmentsWrite,
             Permissions.TimetableRead,
             Permissions.LeaveRead,
             Permissions.LeaveWrite,

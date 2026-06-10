@@ -4,12 +4,77 @@ using EduSync.Infrastructure.Tenancy;
 using EduSync.Modules.Parents.Application;
 using EduSync.Modules.Parents.Application.Dtos;
 using EduSync.Modules.Parents.Domain;
+using EduSync.Modules.Students.Domain;
 using EduSync.SharedKernel.Pagination;
 using EduSync.SharedKernel.Results;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace EduSync.Infrastructure.Application.Parents;
+
+internal static class ParentLinkHelper
+{
+    public static async Task<(IReadOnlyList<string> Children, IReadOnlyList<string> StudentIds)> LoadChildInfoAsync(
+        EduSyncDbContext db,
+        Guid parentId,
+        CancellationToken ct)
+    {
+        var links = await db.StudentParents.AsNoTracking()
+            .Where(sp => sp.ParentId == parentId && sp.IsActive && !sp.IsDeleted)
+            .Join(db.Students.AsNoTracking(),
+                sp => sp.StudentId,
+                s => s.Id,
+                (sp, s) => new { s.ExternalId, s.FullName })
+            .ToListAsync(ct);
+
+        return (
+            links.Select(l => l.FullName).ToList(),
+            links.Select(l => l.ExternalId).ToList());
+    }
+
+    public static async Task SyncStudentLinksAsync(
+        EduSyncDbContext db,
+        Guid tenantId,
+        Parent parent,
+        IReadOnlyList<string>? studentExternalIds,
+        CancellationToken ct)
+    {
+        if (studentExternalIds is null)
+        {
+            return;
+        }
+
+        var students = await db.Students
+            .Where(s => studentExternalIds.Contains(s.ExternalId) && !s.IsDeleted)
+            .ToListAsync(ct);
+
+        var existing = await db.StudentParents
+            .Where(sp => sp.ParentId == parent.Id && !sp.IsDeleted)
+            .ToListAsync(ct);
+
+        foreach (var link in existing)
+        {
+            link.IsActive = false;
+            link.ValidTo = DateOnly.FromDateTime(DateTime.UtcNow);
+        }
+
+        foreach (var student in students)
+        {
+            db.StudentParents.Add(new StudentParent
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ExternalId = Guid.NewGuid().ToString("N")[..12],
+                ParentId = parent.Id,
+                StudentId = student.Id,
+                Relationship = "guardian",
+                IsPrimary = true,
+                IsActive = true,
+                ValidFrom = DateOnly.FromDateTime(DateTime.UtcNow),
+            });
+        }
+    }
+}
 
 public sealed class ListParentsQueryHandler(EduSyncDbContext db)
     : IRequestHandler<ListParentsQuery, Result<PaginatedList<ParentDto>>>
@@ -31,7 +96,13 @@ public sealed class ListParentsQueryHandler(EduSyncDbContext db)
             : query.OrderBy(p => p.LastName);
 
         var page = await QueryPagination.ToPaginatedListAsync(query, request.Pagination, cancellationToken);
-        var items = page.Items.Select(ParentMapping.ToDto).ToList();
+        var items = new List<ParentDto>();
+        foreach (var parent in page.Items)
+        {
+            var (children, studentIds) = await ParentLinkHelper.LoadChildInfoAsync(db, parent.Id, cancellationToken);
+            items.Add(ParentMapping.ToDto(parent, children, studentIds));
+        }
+
         return Result<PaginatedList<ParentDto>>.Success(
             PaginatedList<ParentDto>.Create(items, page.Page, page.PageSize, page.TotalCount));
     }
@@ -44,9 +115,13 @@ public sealed class GetParentByIdQueryHandler(EduSyncDbContext db)
     {
         var parent = await db.Parents.AsNoTracking()
             .FirstOrDefaultAsync(p => p.ExternalId == request.ExternalId && !p.IsDeleted, cancellationToken);
-        return parent is null
-            ? Result<ParentDto>.Failure(Error.NotFound("Parent not found."))
-            : Result<ParentDto>.Success(ParentMapping.ToDto(parent));
+        if (parent is null)
+        {
+            return Result<ParentDto>.Failure(Error.NotFound("Parent not found."));
+        }
+
+        var (children, studentIds) = await ParentLinkHelper.LoadChildInfoAsync(db, parent.Id, cancellationToken);
+        return Result<ParentDto>.Success(ParentMapping.ToDto(parent, children, studentIds));
     }
 }
 
@@ -72,18 +147,20 @@ public sealed class CreateParentCommandHandler(EduSyncDbContext db, ITenantConte
             Phone = body.Phone,
             Occupation = body.Occupation,
             Address = body.Address,
-            Status = body.Status,
-            ChildrenJson = ParentMapping.SerializeList(body.Children),
-            StudentIdsJson = ParentMapping.SerializeList(body.StudentIds),
+            LifecycleStatus = body.Status,
         };
 
         db.Parents.Add(parent);
+        await ParentLinkHelper.SyncStudentLinksAsync(
+            db, tenantContext.TenantId.Value, parent, body.StudentIds, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
-        return Result<ParentDto>.Success(ParentMapping.ToDto(parent));
+
+        var (children, studentIds) = await ParentLinkHelper.LoadChildInfoAsync(db, parent.Id, cancellationToken);
+        return Result<ParentDto>.Success(ParentMapping.ToDto(parent, children, studentIds));
     }
 }
 
-public sealed class UpdateParentCommandHandler(EduSyncDbContext db)
+public sealed class UpdateParentCommandHandler(EduSyncDbContext db, ITenantContext tenantContext)
     : IRequestHandler<UpdateParentCommand, Result<ParentDto>>
 {
     public async Task<Result<ParentDto>> Handle(UpdateParentCommand request, CancellationToken cancellationToken)
@@ -102,12 +179,17 @@ public sealed class UpdateParentCommandHandler(EduSyncDbContext db)
         if (body.Phone is not null) parent.Phone = body.Phone;
         if (body.Occupation is not null) parent.Occupation = body.Occupation;
         if (body.Address is not null) parent.Address = body.Address;
-        if (body.Status is not null) parent.Status = body.Status;
-        if (body.Children is not null) parent.ChildrenJson = ParentMapping.SerializeList(body.Children);
-        if (body.StudentIds is not null) parent.StudentIdsJson = ParentMapping.SerializeList(body.StudentIds);
+        if (body.Status is not null) parent.LifecycleStatus = body.Status;
+
+        if (body.StudentIds is not null && tenantContext.TenantId.HasValue)
+        {
+            await ParentLinkHelper.SyncStudentLinksAsync(
+                db, tenantContext.TenantId.Value, parent, body.StudentIds, cancellationToken);
+        }
 
         await db.SaveChangesAsync(cancellationToken);
-        return Result<ParentDto>.Success(ParentMapping.ToDto(parent));
+        var (children, studentIds) = await ParentLinkHelper.LoadChildInfoAsync(db, parent.Id, cancellationToken);
+        return Result<ParentDto>.Success(ParentMapping.ToDto(parent, children, studentIds));
     }
 }
 
@@ -124,6 +206,7 @@ public sealed class DeleteParentCommandHandler(EduSyncDbContext db)
         }
 
         parent.IsDeleted = true;
+        parent.LifecycleStatus = "inactive";
         await db.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }

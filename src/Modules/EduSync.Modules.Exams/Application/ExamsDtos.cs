@@ -54,3 +54,25 @@ public sealed record GetExamByIdQuery(string ExternalId) : IRequest<Result<ExamD
 public sealed record CreateExamCommand(CreateExamRequest Request) : IRequest<Result<ExamDto>>;
 public sealed record UpdateExamCommand(string ExternalId, UpdateExamRequest Request) : IRequest<Result<ExamDto>>;
 public sealed record DeleteExamCommand(string ExternalId) : IRequest<Result>;
+
+public sealed record ExamResultDto(
+    string Id,
+    string ExamId,
+    string StudentId,
+    decimal MarksObtained,
+    decimal TotalMarks,
+    string? Grade,
+    string Status,
+    string? Remarks);
+
+public sealed record RecordExamResultRequest(
+    string ExamExternalId,
+    string StudentExternalId,
+    decimal MarksObtained,
+    decimal TotalMarks,
+    string? Grade,
+    string? Remarks);
+
+public sealed record ListExamResultsQuery(string? ExamExternalId, string? StudentExternalId, Guid? AcademicYearId)
+    : IRequest<Result<IReadOnlyList<ExamResultDto>>>;
+public sealed record RecordExamResultCommand(RecordExamResultRequest Request) : IRequest<Result<ExamResultDto>>;

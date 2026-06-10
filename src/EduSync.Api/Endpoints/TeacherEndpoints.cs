@@ -48,7 +48,23 @@ public static class TeacherEndpoints
 
         }).RequirePermission(Permissions.TeachersRead);
 
+        group.MapGet("/assignments", async (string? teacherId, Guid? academicYearId, ISender sender) =>
+        {
+            var result = await sender.Send(new ListTeacherAssignmentsQuery(teacherId, academicYearId));
+            return result.ToHttpResult(dto => Results.Ok(dto));
+        }).RequirePermission(Permissions.TeachersRead);
 
+        group.MapPost("/assignments", async (CreateTeacherAssignmentRequest body, ISender sender) =>
+        {
+            var result = await sender.Send(new CreateTeacherAssignmentCommand(body));
+            return result.ToHttpResult(dto => Results.Created($"/api/teachers/assignments/{dto!.Id}", dto));
+        }).RequirePermission(Permissions.TeachersWrite);
+
+        group.MapDelete("/assignments/{id}", async (string id, ISender sender) =>
+        {
+            var result = await sender.Send(new DeactivateTeacherAssignmentCommand(id));
+            return result.ToHttpResult();
+        }).RequirePermission(Permissions.TeachersWrite);
 
         group.MapGet("/{id}", async (string id, ISender sender) =>
 
@@ -95,8 +111,6 @@ public static class TeacherEndpoints
             return result.ToHttpResult();
 
         }).RequirePermission(Permissions.TeachersDelete);
-
-
 
         return group;
 

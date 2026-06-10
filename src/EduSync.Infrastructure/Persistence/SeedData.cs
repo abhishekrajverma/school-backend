@@ -4,7 +4,7 @@ using EduSync.Modules.Academics.Application;
 using EduSync.Modules.Academics.Domain;
 using EduSync.Modules.Identity.Application.Abstractions;
 using EduSync.Modules.Identity.Domain;
-using EduSync.Modules.Parents.Application;
+using EduSync.SharedKernel.Constants;
 using EduSync.Modules.Parents.Domain;
 using EduSync.Modules.Staff.Application;
 using EduSync.Modules.Staff.Domain;
@@ -36,6 +36,8 @@ namespace EduSync.Infrastructure.Persistence;
 public static class SeedData
 {
     public static readonly Guid DemoTenantGuid = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1");
+    public static readonly Guid DemoBranchGuid = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1");
+    public static readonly Guid DemoAcademicYearGuid = Guid.Parse("cccccccc-cccc-cccc-cccc-ccccccccccc1");
     public const string DemoTenantExternalId = "demo-school-001";
     public const string DemoTenantSlug = "demo-school";
     public const string AdminEmail = "admin@school.edu";
@@ -60,6 +62,9 @@ public static class SeedData
             await SeedPhase5IfMissingAsync(db, DemoTenantGuid, cancellationToken);
             await SeedEnquiriesIfMissingAsync(db, cancellationToken);
             await SeedFinancialYearsIfMissingAsync(db, DemoTenantGuid, cancellationToken);
+            await SeedBranchIfMissingAsync(db, DemoTenantGuid, cancellationToken);
+            await SeedEnrollmentsIfMissingAsync(db, DemoTenantGuid, cancellationToken);
+            await SeedStudentParentLinksIfMissingAsync(db, DemoTenantGuid, cancellationToken);
             await EnsureAdminOnlyLoginAsync(db, passwordHasher, DemoTenantGuid, cancellationToken);
             return;
         }
@@ -86,10 +91,22 @@ public static class SeedData
         };
 
         db.Tenants.Add(tenant);
+        db.Branches.Add(new Branch
+        {
+            Id = DemoBranchGuid,
+            TenantId = DemoTenantGuid,
+            ExternalId = "main",
+            Code = "MAIN",
+            Name = "Main Campus",
+            IsHeadOffice = true,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+        });
+
         db.AcademicYears.AddRange(
             new AcademicYear
             {
-                Id = Guid.NewGuid(),
+                Id = DemoAcademicYearGuid,
                 TenantId = DemoTenantGuid,
                 Name = FinancialYearDefaults.Demo,
                 StartDate = new DateOnly(2024, 4, 1),
@@ -117,7 +134,11 @@ public static class SeedData
             JoinedAt = DateTime.UtcNow,
         });
         db.Users.Add(admin);
-        db.Students.AddRange(CreateDemoStudents(DemoTenantGuid));
+        foreach (var (student, enrollment) in CreateDemoStudentsWithEnrollments(DemoTenantGuid, DemoBranchGuid, DemoAcademicYearGuid))
+        {
+            db.Students.Add(student);
+            db.StudentEnrollments.Add(enrollment);
+        }
         await SeedPhase2IfMissingAsync(db, DemoTenantGuid, cancellationToken);
         await SeedPhase3IfMissingAsync(db, DemoTenantGuid, cancellationToken);
         await SeedPhase4IfMissingAsync(db, DemoTenantGuid, cancellationToken);
@@ -296,7 +317,9 @@ public static class SeedData
 
         if (!await db.AdmissionApplications.AnyAsync(cancellationToken))
         {
-            db.AdmissionApplications.Add(CreateSampleAdmission(tenantId));
+            var branchId = await db.Branches.Where(b => b.TenantId == tenantId).Select(b => b.Id).FirstAsync(cancellationToken);
+            var yearId = await db.AcademicYears.Where(y => y.TenantId == tenantId && y.IsCurrent).Select(y => y.Id).FirstAsync(cancellationToken);
+            db.AdmissionApplications.Add(CreateSampleAdmission(tenantId, branchId, yearId));
         }
 
         if (db.ChangeTracker.HasChanges())
@@ -312,7 +335,7 @@ public static class SeedData
             Id = Guid.NewGuid(), TenantId = tenantId, ExternalId = "1", FirstName = "Rajesh", LastName = "Kumar",
             EmployeeId = "EMP001", Department = "Science", Subject = "Chemistry", Qualification = "Ph.D. Chemistry",
             ExperienceYears = 15, Email = "rajesh.k@school.edu", Phone = "+91 98765 12340", Salary = 85000,
-            JoiningDate = new DateOnly(2010, 6, 15), Status = "active",
+            JoiningDate = new DateOnly(2010, 6, 15), LifecycleStatus = "active",
             ClassesJson = TeacherMapping.SerializeClasses(["10-A", "11-B", "12-A"]),
             AvatarUrl = "https://api.dicebear.com/7.x/avataaars/svg?seed=rajesh",
         };
@@ -321,7 +344,7 @@ public static class SeedData
             Id = Guid.NewGuid(), TenantId = tenantId, ExternalId = "2", FirstName = "Anita", LastName = "Singh",
             EmployeeId = "EMP002", Department = "Mathematics", Subject = "Mathematics", Qualification = "M.Sc. Mathematics",
             ExperienceYears = 12, Email = "anita.s@school.edu", Phone = "+91 98765 12341", Salary = 72000,
-            JoiningDate = new DateOnly(2012, 8, 1), Status = "active",
+            JoiningDate = new DateOnly(2012, 8, 1), LifecycleStatus = "active",
             ClassesJson = TeacherMapping.SerializeClasses(["9-C", "10-A", "10-B"]),
             AvatarUrl = "https://api.dicebear.com/7.x/avataaars/svg?seed=anita",
         };
@@ -333,18 +356,14 @@ public static class SeedData
         {
             Id = Guid.NewGuid(), TenantId = tenantId, ExternalId = "1", FirstName = "Rajesh", LastName = "Sharma",
             Email = "rajesh.sharma@email.com", Phone = "+91 98765 43200", Occupation = "Business Owner",
-            Address = "123 Green Park, Mumbai", Status = "active",
-            ChildrenJson = ParentMapping.SerializeList(["Arjun Sharma"]),
-            StudentIdsJson = ParentMapping.SerializeList(["1"]),
+            Address = "123 Green Park, Mumbai", LifecycleStatus = "active",
             AvatarUrl = "https://api.dicebear.com/7.x/avataaars/svg?seed=rajeshp",
         };
         yield return new Parent
         {
             Id = Guid.NewGuid(), TenantId = tenantId, ExternalId = "2", FirstName = "Sunita", LastName = "Patel",
             Email = "sunita.patel@email.com", Phone = "+91 98765 43201", Occupation = "Doctor",
-            Address = "456 Rose Garden, Mumbai", Status = "active",
-            ChildrenJson = ParentMapping.SerializeList(["Priya Patel"]),
-            StudentIdsJson = ParentMapping.SerializeList(["2"]),
+            Address = "456 Rose Garden, Mumbai", LifecycleStatus = "active",
         };
     }
 
@@ -378,7 +397,7 @@ public static class SeedData
         };
     }
 
-    private static AdmissionApplication CreateSampleAdmission(Guid tenantId)
+    private static AdmissionApplication CreateSampleAdmission(Guid tenantId, Guid branchId, Guid academicYearId)
     {
         var form = new
         {
@@ -397,8 +416,11 @@ public static class SeedData
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
+            BranchId = branchId,
+            AcademicYearId = academicYearId,
             ExternalId = "adm-sample-001",
             ApplicationNo = "ADM2026001001",
+            Source = AdmissionSources.Online,
             Status = AdmissionStatuses.Submitted,
             CurrentStep = "review",
             SubmittedAt = DateTime.UtcNow.AddDays(-2),
@@ -419,18 +441,21 @@ public static class SeedData
         IsActive = true,
     };
 
-    private static IEnumerable<Student> CreateDemoStudents(Guid tenantId)
+    private static IEnumerable<(Student Student, StudentEnrollment Enrollment)> CreateDemoStudentsWithEnrollments(
+        Guid tenantId, Guid branchId, Guid academicYearId)
     {
-        yield return CreateStudent(tenantId, "1", "Arjun", "Sharma", "10-A", "A", "1001", "ADM2020001",
-            "arjun.s@school.edu", "+91 98765 43210", "2008-05-15", "male", "B+", "rajesh.sharma@email.com", 96, "paid");
-        yield return CreateStudent(tenantId, "2", "Priya", "Patel", "8-B", "B", "802", "ADM2021015",
-            "priya.p@school.edu", "+91 98765 43211", "2010-08-22", "female", "A+", "sunita.patel@email.com", 94, "pending");
-        yield return CreateStudent(tenantId, "3", "Rahul", "Verma", "12-A", "A", "1201", "ADM2019008",
-            "rahul.v@school.edu", "+91 98765 43212", "2006-03-10", "male", "O+", "anil.verma@email.com", 92, "paid");
+        yield return CreateStudentWithEnrollment(tenantId, branchId, academicYearId, "1", "Arjun", "Sharma", "10-A", "A", "1001", "ADM2020001",
+            "arjun.s@school.edu", "+91 98765 43210", "2008-05-15", "male", "B+");
+        yield return CreateStudentWithEnrollment(tenantId, branchId, academicYearId, "2", "Priya", "Patel", "8-B", "B", "802", "ADM2021015",
+            "priya.p@school.edu", "+91 98765 43211", "2010-08-22", "female", "A+");
+        yield return CreateStudentWithEnrollment(tenantId, branchId, academicYearId, "3", "Rahul", "Verma", "12-A", "A", "1201", "ADM2019008",
+            "rahul.v@school.edu", "+91 98765 43212", "2006-03-10", "male", "O+");
     }
 
-    private static Student CreateStudent(
+    private static (Student, StudentEnrollment) CreateStudentWithEnrollment(
         Guid tenantId,
+        Guid branchId,
+        Guid academicYearId,
         string externalId,
         string firstName,
         string lastName,
@@ -442,32 +467,130 @@ public static class SeedData
         string phone,
         string dob,
         string gender,
-        string bloodGroup,
-        string parentEmail,
-        int attendance,
-        string feeStatus) => new()
+        string bloodGroup)
     {
-        Id = Guid.NewGuid(),
-        TenantId = tenantId,
-        ExternalId = externalId,
-        FinancialYear = FinancialYearDefaults.Demo,
-        FirstName = firstName,
-        LastName = lastName,
-        ClassName = className,
-        Section = section,
-        RollNo = rollNo,
-        AdmissionNo = admissionNo,
-        Email = email,
-        Phone = phone,
-        DateOfBirth = DateOnly.Parse(dob),
-        Gender = gender,
-        BloodGroup = bloodGroup,
-        ParentEmail = parentEmail,
-        AttendancePercent = attendance,
-        FeeStatus = feeStatus,
-        Status = "active",
-        AvatarUrl = $"https://api.dicebear.com/7.x/avataaars/svg?seed={firstName.ToLowerInvariant()}",
-    };
+        var studentId = Guid.NewGuid();
+        var student = new Student
+        {
+            Id = studentId,
+            TenantId = tenantId,
+            ExternalId = externalId,
+            FirstName = firstName,
+            LastName = lastName,
+            AdmissionNo = admissionNo,
+            Email = email,
+            Phone = phone,
+            DateOfBirth = DateOnly.Parse(dob),
+            Gender = gender,
+            BloodGroup = bloodGroup,
+            LifecycleStatus = LifecycleStatuses.Active,
+            AvatarUrl = $"https://api.dicebear.com/7.x/avataaars/svg?seed={firstName.ToLowerInvariant()}",
+        };
+        var enrollment = new StudentEnrollment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            BranchId = branchId,
+            ExternalId = Guid.NewGuid().ToString("N")[..12],
+            StudentId = studentId,
+            AcademicYearId = academicYearId,
+            ClassName = className,
+            Section = section,
+            RollNo = rollNo,
+            EnrollmentStatus = EnrollmentStatuses.Enrolled,
+            EnrolledAt = DateTime.UtcNow,
+        };
+        return (student, enrollment);
+    }
+
+    private static async Task SeedBranchIfMissingAsync(EduSyncDbContext db, Guid tenantId, CancellationToken cancellationToken)
+    {
+        if (await db.Branches.AnyAsync(b => b.TenantId == tenantId, cancellationToken))
+        {
+            return;
+        }
+
+        db.Branches.Add(new Branch
+        {
+            Id = DemoBranchGuid,
+            TenantId = tenantId,
+            ExternalId = "main",
+            Code = "MAIN",
+            Name = "Main Campus",
+            IsHeadOffice = true,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task SeedEnrollmentsIfMissingAsync(EduSyncDbContext db, Guid tenantId, CancellationToken cancellationToken)
+    {
+        if (await db.StudentEnrollments.AnyAsync(e => e.TenantId == tenantId, cancellationToken))
+        {
+            return;
+        }
+
+        var branchId = await db.Branches.Where(b => b.TenantId == tenantId).Select(b => b.Id).FirstOrDefaultAsync(cancellationToken);
+        var yearId = await db.AcademicYears.Where(y => y.TenantId == tenantId && y.IsCurrent).Select(y => y.Id).FirstOrDefaultAsync(cancellationToken);
+        if (branchId == Guid.Empty || yearId == Guid.Empty)
+        {
+            return;
+        }
+
+        var students = await db.Students.Where(s => s.TenantId == tenantId && !s.IsDeleted).ToListAsync(cancellationToken);
+        foreach (var student in students)
+        {
+            db.StudentEnrollments.Add(new StudentEnrollment
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                BranchId = branchId,
+                ExternalId = Guid.NewGuid().ToString("N")[..12],
+                StudentId = student.Id,
+                AcademicYearId = yearId,
+                ClassName = "Unassigned",
+                Section = "A",
+                RollNo = student.AdmissionNo,
+                EnrollmentStatus = EnrollmentStatuses.Enrolled,
+                EnrolledAt = DateTime.UtcNow,
+            });
+        }
+
+        if (db.ChangeTracker.HasChanges())
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private static async Task SeedStudentParentLinksIfMissingAsync(EduSyncDbContext db, Guid tenantId, CancellationToken cancellationToken)
+    {
+        if (await db.StudentParents.AnyAsync(sp => sp.TenantId == tenantId, cancellationToken))
+        {
+            return;
+        }
+
+        var parent = await db.Parents.FirstOrDefaultAsync(p => p.TenantId == tenantId && p.ExternalId == "1", cancellationToken);
+        var student = await db.Students.FirstOrDefaultAsync(s => s.TenantId == tenantId && s.ExternalId == "1", cancellationToken);
+        if (parent is null || student is null)
+        {
+            return;
+        }
+
+        db.StudentParents.Add(new StudentParent
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ExternalId = Guid.NewGuid().ToString("N")[..12],
+            ParentId = parent.Id,
+            StudentId = student.Id,
+            Relationship = "father",
+            IsPrimary = true,
+            IsActive = true,
+            ValidFrom = DateOnly.FromDateTime(DateTime.UtcNow),
+        });
+        await db.SaveChangesAsync(cancellationToken);
+    }
 
     private static async Task SeedPhase3IfMissingAsync(EduSyncDbContext db, Guid tenantId, CancellationToken cancellationToken)
     {

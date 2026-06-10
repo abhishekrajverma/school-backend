@@ -1,6 +1,8 @@
+using EduSync.Infrastructure.Application.Students;
 using EduSync.Infrastructure.Caching;
 using EduSync.Infrastructure.Persistence;
 using EduSync.Infrastructure.Tenancy;
+using EduSync.SharedKernel.Constants;
 using EduSync.Modules.Admissions.Domain;
 using EduSync.Modules.Attendance.Domain;
 using EduSync.Modules.Dashboard.Application;
@@ -31,7 +33,14 @@ public sealed class GetDashboardQueryHandler(
         }
 
         await using var db = dbFactory.CreateDbContext();
-        var studentsQuery = db.Students.Where(s => !s.IsDeleted && s.FinancialYear == fy);
+        var year = await db.AcademicYears.AsNoTracking()
+            .FirstOrDefaultAsync(y => y.TenantId == tenant.TenantId && y.Name == fy, ct);
+        var studentsQuery = db.Students.Where(s => !s.IsDeleted);
+        if (year is not null)
+        {
+            studentsQuery = studentsQuery.Where(s => db.StudentEnrollments.Any(e =>
+                e.StudentId == s.Id && e.AcademicYearId == year.Id && e.EnrollmentStatus == EnrollmentStatuses.Enrolled && !e.IsDeleted));
+        }
         var feesQuery = db.FeeInvoices.Where(f => !f.IsDeleted && f.FinancialYear == fy);
         var attendanceQuery = db.AttendanceRecords.Where(a => !a.IsDeleted && a.FinancialYear == fy && a.EntityType == "student");
 

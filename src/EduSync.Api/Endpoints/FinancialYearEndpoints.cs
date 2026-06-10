@@ -23,6 +23,18 @@ public static class FinancialYearEndpoints
             return result.ToHttpResult(dto => Results.Ok(dto));
         }).RequirePermission(Permissions.FinancialYearWrite);
 
+        group.MapPost("/years", async (CreateAcademicYearRequest body, ISender sender) =>
+        {
+            var result = await sender.Send(new CreateAcademicYearCommand(body));
+            return result.ToHttpResult(dto => Results.Created($"/api/financial-year-settings/years/{dto!.Id}", dto));
+        }).RequirePermission(Permissions.FinancialYearWrite);
+
+        group.MapPost("/years/{id}/close", async (string id, ISender sender) =>
+        {
+            var result = await sender.Send(new CloseAcademicYearCommand(id));
+            return result.ToHttpResult(dto => Results.Ok(dto));
+        }).RequirePermission(Permissions.FinancialYearWrite);
+
         return group;
     }
 }

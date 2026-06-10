@@ -7,6 +7,8 @@ public sealed class FeeInvoice : TenantEntity
     public Guid Id { get; set; }
     public string ExternalId { get; set; } = string.Empty;
     public string FinancialYear { get; set; } = string.Empty;
+    public Guid? AcademicYearId { get; set; }
+    public Guid? BranchId { get; set; }
     public string InvoiceNo { get; set; } = string.Empty;
     public string StudentExternalId { get; set; } = string.Empty;
     public string StudentName { get; set; } = string.Empty;

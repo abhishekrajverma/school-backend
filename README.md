@@ -56,6 +56,7 @@ src/
     EduSync.Modules.Attendance/
     EduSync.Modules.Fees/
     EduSync.Modules.Exams/
+    EduSync.Modules.Assignments/
     EduSync.Modules.Timetable/
     EduSync.Modules.Notifications/
     EduSync.Modules.Payroll/
@@ -74,6 +75,9 @@ src/
     EduSync.Modules.Webhooks/
     EduSync.Gateway/          YARP reverse proxy (port 5100)
 tests/
+    EduSync.ArchitectureTests/   NetArchTest layer rules
+    EduSync.UnitTests/
+    EduSync.IntegrationTests/
 
 GraphQL: http://localhost:5000/graphql
 ```
@@ -161,12 +165,22 @@ Restart API — existing demo DBs auto-seed Phase 2 data if teachers table is em
 
 Use `EduSync.http` or Swagger for examples.
 
-## Multi-tenancy
+## Multi-tenancy & request context
 
-1. Client sends `X-Tenant-Id` (and optionally `X-Tenant-Slug`) — matches frontend `erp-tenant-id` / `lib/tenant/constants.ts`.
-2. `TenantResolutionMiddleware` resolves tenant (GUID or external id e.g. `demo-school-001`).
-3. JWT user must have an active row in `identity.TenantMemberships`.
-4. EF global filter: `TenantId == ITenantContext.TenantId` on all `ITenantEntity` tables.
+| Header | Purpose |
+|--------|---------|
+| `X-Tenant-Id` | Required for tenant APIs (GUID, external id, or slug e.g. `demo-school-001`) |
+| `X-Branch-Id` | Optional branch (external id or code); scopes branch-bound data |
+| `X-Financial-Year` or `X-Academic-Year-Id` | Academic year name or GUID; defaults to tenant’s current year |
+| `Authorization: Bearer` | JWT from `/api/auth/login` |
+
+**Pipeline (after auth):** `TenantRateLimit` → `TenantResolution` → `TenantAuthorization` → `BranchResolution` → `BranchAuthorization` → `AcademicYearResolution` → `AuditLogging`
+
+1. `TenantResolutionMiddleware` resolves tenant and sets `ITenantContext`.
+2. `TenantAuthorizationMiddleware` validates JWT `tenant_id` matches header and loads role from `identity.TenantMemberships` (not JWT role alone).
+3. `BranchResolutionMiddleware` + `BranchAuthorizationMiddleware` enforce `identity.BranchMemberships` when `X-Branch-Id` is set (admin/principal have tenant-wide branch access).
+4. `AcademicYearResolutionMiddleware` validates academic year against `tenancy.AcademicYears`.
+5. EF global filters: `TenantId` on all tenant entities; `BranchId` on `BranchEntity` tables when branch context is resolved.
 
 ## Migrations
 
@@ -174,12 +188,12 @@ Use `EduSync.http` or Swagger for examples.
 dotnet ef database update --project src/EduSync.Infrastructure --startup-project src/EduSync.Api
 ```
 
-## Integration tests
-
-Requires Docker (Testcontainers SQL Server):
+## Tests
 
 ```bash
-dotnet test tests/EduSync.IntegrationTests
+dotnet test tests/EduSync.UnitTests          # Role permissions, etc.
+dotnet test tests/EduSync.ArchitectureTests  # NetArchTest layer rules
+dotnet test tests/EduSync.IntegrationTests   # Requires Docker (Testcontainers)
 ```
 
 ## Configuration
@@ -372,6 +386,45 @@ Headers: `Authorization: Bearer <token>`, `X-Tenant-Id: demo-school-001`
 dotnet ef database update --project src/EduSync.Infrastructure --startup-project src/EduSync.Api
 ```
 
-## Roadmap complete
+## Phase 11 — ERP architecture remediation (implemented)
 
-Phases **1–10** are implemented. Further work is product-specific (production hardening, SSO tenant onboarding, etc.).
+Core multi-branch ERP domain: student master + enrollments, registration/admission workflow, promotion, branch RBAC foundations, integration events.
+
+| Feature | API / behavior |
+|---------|----------------|
+| Branches | `GET/POST/PATCH /api/branches` |
+| Branch memberships | `GET/POST/DELETE /api/branches/{id}/memberships` |
+| Registrations | `GET/POST/PUT /api/registrations`, submit, convert → admission |
+| Admission approve | `POST /api/admissions/{id}/approve` → student + enrollment + outbox events |
+| Student enrollments | Class/section/roll on `students.Enrollments` per academic year (not on `Students` row) |
+| Promotion | `POST /api/promotions/bulk`, rollback |
+| Academic year context | Header `X-Academic-Year-Id` / `X-Financial-Year` |
+| Security | Tenant JWT vs header match; parent portal IDOR fix; tenant-filtered outbox |
+
+**Migrations:** `ErpArchitectureRemediation` — apply with `dotnet ef database update`.
+
+## Phase 12 — Future phases (implemented)
+
+DDD maturity, portal readiness, architecture governance.
+
+| Feature | API / behavior |
+|---------|----------------|
+| Academic year CRUD | `POST /api/financial-year-settings/years`, `POST .../years/{id}/close` |
+| Teacher assignments | `GET/POST/DELETE /api/teachers/assignments` |
+| Exam results | `GET/POST /api/exams/results`; portal exams include marks/grade |
+| Assignments module | `GET/POST /api/assignments`; portal `GET /students/me/assignments`, submit |
+| Rich domain | `AdmissionApplication`, `Registration`, `Student`, `AcademicYear` partial classes with behavior methods |
+| Architecture tests | `dotnet test tests/EduSync.ArchitectureTests` (NetArchTest layer rules) |
+
+**Permissions added:** `assignments.read`, `assignments.write`
+
+**Migration:** `FuturePhases` — `exams.ExamResults`, `assignments.Assignments`, `assignments.StudentAssignments`
+
+```bash
+dotnet ef database update --project src/EduSync.Infrastructure --startup-project src/EduSync.Api
+dotnet test tests/EduSync.UnitTests tests/EduSync.ArchitectureTests
+```
+
+## Roadmap
+
+Phases **1–12** are implemented. Further work is product-specific (production hardening, custom roles in SQL, frontend wiring for new endpoints, etc.).

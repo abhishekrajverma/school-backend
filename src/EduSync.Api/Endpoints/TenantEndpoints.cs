@@ -55,7 +55,7 @@ public static class TenantEndpoints
 
             return result.ToHttpResult();
 
-        }).AllowAnonymous();
+        }).RequirePermission(Permissions.TenantsManage);
 
 
 

@@ -10,7 +10,8 @@ internal sealed class AcademicYearConfiguration : IEntityTypeConfiguration<Acade
     {
         builder.ToTable("AcademicYears", "tenancy");
         builder.HasKey(x => x.Id);
-        builder.Property(x => x.Name).HasMaxLength(64).IsRequired();
+        builder.Property(x => x.Name).HasMaxLength(16).IsRequired();
+        builder.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
         builder.HasIndex(x => new { x.TenantId, x.IsCurrent });
     }
 }

@@ -4,6 +4,8 @@ public sealed record AdmissionListItemDto(
     string Id,
     string ApplicationNo,
     string Status,
+    string Source,
+    string? RegistrationId,
     string CurrentStep,
     string? ApplicantName,
     string? ClassSought,
@@ -15,6 +17,9 @@ public sealed record AdmissionDetailDto(
     string Id,
     string ApplicationNo,
     string Status,
+    string Source,
+    string? RegistrationId,
+    string? ApprovedStudentId,
     string CurrentStep,
     object FormData,
     object? Documents,
@@ -23,6 +28,8 @@ public sealed record AdmissionDetailDto(
     string? AcademicSession,
     DateTime CreatedAt,
     DateTime? SubmittedAt);
+
+public sealed record ApproveAdmissionRequest(string? Remarks);
 
 public sealed record CreateAdmissionRequest(
     string? CurrentStep,

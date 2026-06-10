@@ -14,6 +14,7 @@ public static class Phase8ServiceExtensions
         services.AddScoped<IIntegrationEventCollector, IntegrationEventCollector>();
         services.AddScoped<IRegionContext, RegionContext>();
         services.AddSingleton<IIntegrationEventHandler, LoggingIntegrationEventHandler>();
+        services.AddSingleton<IIntegrationEventHandler, AdmissionApprovedIntegrationHandler>();
         services.AddHostedService<OutboxDispatcherBackgroundService>();
 
         return services;

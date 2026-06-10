@@ -64,6 +64,8 @@ internal static class AdmissionJsonHelper
         a.ExternalId,
         a.ApplicationNo,
         a.Status,
+        a.Source,
+        a.RegistrationId?.ToString(),
         a.CurrentStep,
         a.ApplicantName,
         a.ClassSought,
@@ -75,6 +77,9 @@ internal static class AdmissionJsonHelper
         a.ExternalId,
         a.ApplicationNo,
         a.Status,
+        a.Source,
+        a.RegistrationId?.ToString(),
+        a.ApprovedStudentExternalId,
         a.CurrentStep,
         ParseForm(a.FormDataJson),
         ParseDocuments(a.DocumentsJson),
@@ -102,6 +107,26 @@ internal static class AdmissionJsonHelper
         list.RemoveAll(d => string.Equals(d.DocumentType, doc.DocumentType, StringComparison.OrdinalIgnoreCase));
         list.Add(doc);
         return JsonSerializer.Serialize(list, JsonOptions);
+    }
+
+    public static (string FirstName, string LastName, string Email, string? Phone, string? Section, string? RollNo) ParseStudentFields(string formJson)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(formJson);
+            var root = doc.RootElement;
+            return (
+                GetString(root, "firstName") ?? "Student",
+                GetString(root, "lastName") ?? string.Empty,
+                GetString(root, "email") ?? $"{Guid.NewGuid():N}@student.local",
+                GetString(root, "phone"),
+                GetString(root, "section") ?? "A",
+                GetString(root, "rollNo") ?? "0");
+        }
+        catch
+        {
+            return ("Student", string.Empty, $"{Guid.NewGuid():N}@student.local", null, "A", "0");
+        }
     }
 
     private static string? GetString(JsonElement root, string name)

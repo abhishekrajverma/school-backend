@@ -1,19 +1,19 @@
 using EduSync.Infrastructure.Events;
-using EduSync.Infrastructure.Security;
 using EduSync.Infrastructure.MultiRegion;
 using EduSync.Infrastructure.Pagination;
 using EduSync.Infrastructure.Persistence;
+using EduSync.Infrastructure.Security;
 using EduSync.Infrastructure.Tenancy;
 using EduSync.Modules.Events.Domain;
-using Microsoft.AspNetCore.Http;
-using EduSync.Modules.Students.Application;
 using EduSync.Modules.Students.Application.Commands;
 using EduSync.Modules.Students.Application.Dtos;
 using EduSync.Modules.Students.Application.Queries;
 using EduSync.Modules.Students.Domain;
+using EduSync.SharedKernel.Constants;
 using EduSync.SharedKernel.Pagination;
 using EduSync.SharedKernel.Results;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace EduSync.Infrastructure.Application.Students;
@@ -21,7 +21,8 @@ namespace EduSync.Infrastructure.Application.Students;
 public sealed class ListStudentsQueryHandler(
     IReadDbContextFactory dbFactory,
     IFieldEncryptionService encryption,
-    IFinancialYearContext financialYear)
+    IAcademicYearContext academicYear,
+    IBranchContext branch)
     : IRequestHandler<ListStudentsQuery, Result<PaginatedList<StudentDto>>>
 {
     public async Task<Result<PaginatedList<StudentDto>>> Handle(
@@ -29,11 +30,7 @@ public sealed class ListStudentsQueryHandler(
         CancellationToken cancellationToken)
     {
         await using var db = dbFactory.CreateDbContext();
-        var query = db.Students.AsNoTracking().Where(s => !s.IsDeleted);
-        if (financialYear.IsResolved)
-        {
-            query = query.Where(s => s.FinancialYear == financialYear.FinancialYear);
-        }
+        var students = db.Students.AsNoTracking().Where(s => !s.IsDeleted);
 
         if (!string.IsNullOrWhiteSpace(request.Pagination.Search))
         {
@@ -41,21 +38,27 @@ public sealed class ListStudentsQueryHandler(
             if (term.Length >= 2)
             {
                 var pattern = $"%{term}%";
-                query = query.Where(s =>
+                students = students.Where(s =>
                     EF.Functions.Like(s.FirstName, pattern) ||
                     EF.Functions.Like(s.LastName, pattern) ||
                     EF.Functions.Like(s.Email, pattern) ||
-                    EF.Functions.Like(s.AdmissionNo, pattern) ||
-                    EF.Functions.Like(s.RollNo, pattern));
+                    EF.Functions.Like(s.AdmissionNo, pattern));
             }
         }
 
-        query = ApplySorting(query, request.Pagination);
+        students = ApplySorting(students, request.Pagination);
+        var page = await QueryPagination.ToPaginatedListAsync(students, request.Pagination, cancellationToken);
+        var studentIds = page.Items.Select(s => s.Id).ToList();
+        var enrollments = await StudentEnrollmentHelper.LoadCurrentEnrollmentsAsync(
+            db.StudentEnrollments, studentIds, academicYear, branch, cancellationToken);
 
-        var page = await QueryPagination.ToPaginatedListAsync(query, request.Pagination, cancellationToken);
-        var dtoItems = page.Items.Select(s => StudentSensitiveFields.ToDto(s, encryption)).ToList();
+        var dtoItems = page.Items.Select(s =>
+            StudentSensitiveFields.ToDto(
+                s,
+                enrollments.GetValueOrDefault(s.Id),
+                encryption)).ToList();
+
         var dtos = PaginatedList<StudentDto>.Create(dtoItems, page.Page, page.PageSize, page.TotalCount);
-
         return Result<PaginatedList<StudentDto>>.Success(dtos);
     }
 
@@ -68,8 +71,6 @@ public sealed class ListStudentsQueryHandler(
         {
             "name" => desc ? query.OrderByDescending(s => s.LastName).ThenByDescending(s => s.FirstName)
                 : query.OrderBy(s => s.LastName).ThenBy(s => s.FirstName),
-            "class" => desc ? query.OrderByDescending(s => s.ClassName) : query.OrderBy(s => s.ClassName),
-            "rollno" => desc ? query.OrderByDescending(s => s.RollNo) : query.OrderBy(s => s.RollNo),
             _ => desc ? query.OrderByDescending(s => s.CreatedAt) : query.OrderBy(s => s.CreatedAt),
         };
     }
@@ -78,40 +79,45 @@ public sealed class ListStudentsQueryHandler(
 public sealed class GetStudentByIdQueryHandler(
     EduSyncDbContext db,
     IFieldEncryptionService encryption,
-    IFinancialYearContext financialYear)
+    IAcademicYearContext academicYear,
+    IBranchContext branch)
     : IRequestHandler<GetStudentByIdQuery, Result<StudentDto>>
 {
     public async Task<Result<StudentDto>> Handle(GetStudentByIdQuery request, CancellationToken cancellationToken)
     {
-        var query = db.Students.AsNoTracking().Where(s => s.ExternalId == request.ExternalId && !s.IsDeleted);
-        if (financialYear.IsResolved)
+        var student = await db.Students.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.ExternalId == request.ExternalId && !s.IsDeleted, cancellationToken);
+
+        if (student is null)
         {
-            query = query.Where(s => s.FinancialYear == financialYear.FinancialYear);
+            return Result<StudentDto>.Failure(Error.NotFound("Student not found."));
         }
 
-        var student = await query.FirstOrDefaultAsync(cancellationToken);
+        var enrollmentQuery = db.StudentEnrollments.AsNoTracking()
+            .Where(e => e.StudentId == student.Id && !e.IsDeleted);
+        enrollmentQuery = StudentEnrollmentHelper.ActiveEnrollments(enrollmentQuery, academicYear, branch);
+        var enrollment = await enrollmentQuery.OrderByDescending(e => e.EnrolledAt).FirstOrDefaultAsync(cancellationToken);
 
-        return student is null
-            ? Result<StudentDto>.Failure(Error.NotFound("Student not found."))
-            : Result<StudentDto>.Success(StudentSensitiveFields.ToDto(student, encryption));
+        return Result<StudentDto>.Success(StudentSensitiveFields.ToDto(student, enrollment, encryption));
     }
 }
 
 public sealed class CreateStudentCommandHandler(
     EduSyncDbContext db,
     ITenantContext tenantContext,
+    IBranchContext branchContext,
+    IAcademicYearContext academicYearContext,
     IIntegrationEventCollector events,
     IRegionContext region,
     IHttpContextAccessor httpContextAccessor,
-    IFieldEncryptionService encryption,
-    IFinancialYearContext financialYear)
+    IFieldEncryptionService encryption)
     : IRequestHandler<CreateStudentCommand, Result<StudentDto>>
 {
     public async Task<Result<StudentDto>> Handle(CreateStudentCommand request, CancellationToken cancellationToken)
     {
-        if (!tenantContext.TenantId.HasValue)
+        if (!tenantContext.TenantId.HasValue || !branchContext.BranchId.HasValue || !academicYearContext.AcademicYearId.HasValue)
         {
-            return Result<StudentDto>.Failure(Error.Forbidden("Tenant context is required."));
+            return Result<StudentDto>.Failure(Error.Forbidden("Tenant, branch, and academic year are required."));
         }
 
         var body = request.Request;
@@ -126,7 +132,6 @@ public sealed class CreateStudentCommandHandler(
         {
             Id = Guid.NewGuid(),
             TenantId = tenantContext.TenantId.Value,
-            FinancialYear = financialYear.FinancialYear ?? FinancialYearDefaults.Demo,
             ExternalId = Guid.NewGuid().ToString("N")[..12],
             FirstName = body.FirstName.Trim(),
             LastName = body.LastName.Trim(),
@@ -136,33 +141,56 @@ public sealed class CreateStudentCommandHandler(
             Gender = body.Gender,
             BloodGroup = body.BloodGroup,
             Address = body.Address,
+            AdmissionNo = body.AdmissionNo,
+            LifecycleStatus = LifecycleStatuses.All.Contains(body.Status) ? body.Status : LifecycleStatuses.Active,
+        };
+
+        var enrollment = new StudentEnrollment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantContext.TenantId.Value,
+            BranchId = branchContext.BranchId.Value,
+            ExternalId = Guid.NewGuid().ToString("N")[..12],
+            StudentId = student.Id,
+            AcademicYearId = academicYearContext.AcademicYearId.Value,
             ClassName = body.Class,
             Section = body.Section,
             RollNo = body.RollNo,
-            AdmissionNo = body.AdmissionNo,
-            ParentName = body.ParentName,
-            ParentPhone = body.ParentPhone,
-            ParentEmail = body.ParentEmail,
-            Status = body.Status,
+            EnrollmentStatus = EnrollmentStatuses.Enrolled,
+            EnrolledAt = DateTime.UtcNow,
         };
 
         StudentSensitiveFields.ApplyEncryption(student, encryption);
         db.Students.Add(student);
+        db.StudentEnrollments.Add(enrollment);
+
         events.Add(IntegrationEventFactory.Create(
             IntegrationEventTypes.StudentCreated,
-            new { student.ExternalId, student.AdmissionNo, student.ClassName },
+            new { studentExternalId = student.ExternalId, admissionNo = student.AdmissionNo, className = enrollment.ClassName },
             tenantContext,
             region,
             httpContextAccessor));
+        events.Add(IntegrationEventFactory.Create(
+            IntegrationEventTypes.StudentEnrolled,
+            new { studentExternalId = student.ExternalId, enrollmentExternalId = enrollment.ExternalId, className = enrollment.ClassName },
+            tenantContext,
+            region,
+            httpContextAccessor));
+
         await db.SaveChangesAsync(cancellationToken);
-        return Result<StudentDto>.Success(StudentSensitiveFields.ToDto(student, encryption));
+        return Result<StudentDto>.Success(
+            StudentSensitiveFields.ToDto(student, enrollment, encryption, body.ParentName, body.ParentPhone, body.ParentEmail));
     }
 
     private static DateOnly? ParseDate(string? value) =>
         DateOnly.TryParse(value, out var date) ? date : null;
 }
 
-public sealed class UpdateStudentCommandHandler(EduSyncDbContext db, IFieldEncryptionService encryption)
+public sealed class UpdateStudentCommandHandler(
+    EduSyncDbContext db,
+    IFieldEncryptionService encryption,
+    IAcademicYearContext academicYear,
+    IBranchContext branch)
     : IRequestHandler<UpdateStudentCommand, Result<StudentDto>>
 {
     public async Task<Result<StudentDto>> Handle(UpdateStudentCommand request, CancellationToken cancellationToken)
@@ -185,18 +213,31 @@ public sealed class UpdateStudentCommandHandler(EduSyncDbContext db, IFieldEncry
         if (body.Gender is not null) student.Gender = body.Gender;
         if (body.BloodGroup is not null) student.BloodGroup = body.BloodGroup;
         if (body.Address is not null) student.Address = body.Address;
-        if (body.Class is not null) student.ClassName = body.Class;
-        if (body.Section is not null) student.Section = body.Section;
-        if (body.RollNo is not null) student.RollNo = body.RollNo;
         if (body.AdmissionNo is not null) student.AdmissionNo = body.AdmissionNo;
-        if (body.ParentName is not null) student.ParentName = body.ParentName;
-        if (body.ParentPhone is not null) student.ParentPhone = body.ParentPhone;
-        if (body.ParentEmail is not null) student.ParentEmail = body.ParentEmail;
-        if (body.Status is not null) student.Status = body.Status;
+        if (body.Status is not null)
+        {
+            var statusResult = student.SetLifecycleStatus(body.Status);
+            if (!statusResult.IsSuccess)
+            {
+                return Result<StudentDto>.Failure(statusResult.Error!);
+            }
+        }
+
+        var enrollmentQuery = db.StudentEnrollments.Where(e => e.StudentId == student.Id && !e.IsDeleted);
+        enrollmentQuery = StudentEnrollmentHelper.ActiveEnrollments(enrollmentQuery, academicYear, branch);
+        var enrollment = await enrollmentQuery.OrderByDescending(e => e.EnrolledAt).FirstOrDefaultAsync(cancellationToken);
+
+        if (enrollment is not null)
+        {
+            if (body.Class is not null) enrollment.ClassName = body.Class;
+            if (body.Section is not null) enrollment.Section = body.Section;
+            if (body.RollNo is not null) enrollment.RollNo = body.RollNo;
+        }
 
         StudentSensitiveFields.ApplyEncryption(student, encryption);
         await db.SaveChangesAsync(cancellationToken);
-        return Result<StudentDto>.Success(StudentSensitiveFields.ToDto(student, encryption));
+        return Result<StudentDto>.Success(
+            StudentSensitiveFields.ToDto(student, enrollment, encryption, body.ParentName, body.ParentPhone, body.ParentEmail));
     }
 }
 
@@ -215,6 +256,7 @@ public sealed class DeleteStudentCommandHandler(EduSyncDbContext db)
         }
 
         student.IsDeleted = true;
+        student.MarkInactive();
         await db.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }

@@ -12,11 +12,12 @@ public sealed class EduSyncReadDbContextFactory(
     IOptions<DatabaseOptions> databaseOptions,
     IOptions<CapacityOptions> capacityOptions,
     ITenantContext tenantContext,
+    IBranchContext branchContext,
     IIntegrationEventCollector eventCollector) : IReadDbContextFactory
 {
     private readonly DbContextOptions<EduSyncDbContext> _options = BuildOptions(configuration, databaseOptions.Value, capacityOptions.Value);
 
-    public EduSyncDbContext CreateDbContext() => new(_options, tenantContext, eventCollector);
+    public EduSyncDbContext CreateDbContext() => new(_options, tenantContext, branchContext, eventCollector);
 
     private static DbContextOptions<EduSyncDbContext> BuildOptions(
         IConfiguration configuration,

@@ -62,6 +62,18 @@ public static class PortalEndpoints
 
         }).RequirePermission(Permissions.PortalStudent);
 
+        student.MapGet("/assignments", async (ISender sender) =>
+        {
+            var result = await sender.Send(new GetStudentPortalAssignmentsQuery());
+            return result.ToHttpResult(dto => Results.Ok(dto));
+        }).RequirePermission(Permissions.PortalStudent);
+
+        student.MapPost("/assignments/{assignmentId}/submit", async (string assignmentId, EduSync.Modules.Assignments.Application.SubmitAssignmentRequest body, ISender sender) =>
+        {
+            var result = await sender.Send(new EduSync.Modules.Assignments.Application.SubmitStudentAssignmentCommand(assignmentId, body));
+            return result.ToHttpResult(dto => Results.Ok(dto));
+        }).RequirePermission(Permissions.PortalStudent);
+
         student.MapGet("/timetable", async (ISender sender) =>
 
         {

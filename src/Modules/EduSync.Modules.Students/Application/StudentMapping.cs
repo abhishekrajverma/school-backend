@@ -5,14 +5,14 @@ namespace EduSync.Modules.Students.Application;
 
 public static class StudentMapping
 {
-    public static StudentDto ToDto(Student student) => new(
+    public static StudentDto ToDto(Student student, StudentEnrollment? enrollment = null) => new(
         student.ExternalId,
         student.FirstName,
         student.LastName,
         student.FullName,
-        student.ClassName,
-        student.Section,
-        student.RollNo,
+        enrollment?.ClassName ?? string.Empty,
+        enrollment?.Section ?? string.Empty,
+        enrollment?.RollNo ?? string.Empty,
         student.AdmissionNo,
         student.Email,
         student.Phone,
@@ -20,11 +20,11 @@ public static class StudentMapping
         student.Gender,
         student.BloodGroup,
         student.Address,
-        student.ParentName,
-        student.ParentPhone,
-        student.ParentEmail,
-        student.Status,
-        student.FeeStatus,
-        student.AttendancePercent,
+        null,
+        null,
+        null,
+        student.LifecycleStatus,
+        null,
+        0,
         student.AvatarUrl);
 }

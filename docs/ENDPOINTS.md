@@ -2,6 +2,16 @@
 
 Base URL: `/api` (BFF: `/api/proxy/...` on Next.js)
 
+## Request headers (all tenant APIs)
+
+| Header | Required | Notes |
+|--------|----------|--------|
+| `X-Tenant-Id` | Yes | Tenant external id, slug, or GUID (e.g. `demo-school-001`) |
+| `Authorization` | Most routes | `Bearer {accessToken}` from login |
+| `X-Branch-Id` | Branch-scoped ops | Branch external id or code |
+| `X-Financial-Year` | Optional | Academic year **name** (e.g. `2025-26`) |
+| `X-Academic-Year-Id` | Optional | Academic year **GUID**; overrides name header |
+
 ## Auth (`lib/api/auth.ts` → BFF `/api/auth/*` → ASP.NET)
 
 | Frontend | ASP.NET |
@@ -20,7 +30,49 @@ Base URL: `/api` (BFF: `/api/proxy/...` on Next.js)
 | `GET /tenants/current` | `GET /api/tenants/current` | Done |
 | `GET /tenants/{id}` | `GET /api/tenants/{id}` | Done |
 
+## Branches
+
+| Frontend proxy path | ASP.NET | Status |
+|---------------------|---------|--------|
+| `GET /branches` | `GET /api/branches` | Done |
+| `GET /branches/{id}` | `GET /api/branches/{id}` | Done |
+| `POST /branches` | `POST /api/branches` | Done |
+| `PATCH /branches/{id}` | `PATCH /api/branches/{id}` | Done |
+| `GET /branches/{id}/memberships` | `GET /api/branches/{id}/memberships` | Done |
+| `POST /branches/{id}/memberships` | `POST /api/branches/{id}/memberships` | Done |
+| `DELETE /branches/{id}/memberships/{userId}` | `DELETE /api/branches/{id}/memberships/{userId}` | Done |
+
+## Financial year / academic years
+
+| Frontend proxy path | ASP.NET | Status |
+|---------------------|---------|--------|
+| `GET /financial-year-settings` | `GET /api/financial-year-settings` | Done |
+| `PUT /financial-year-settings/current` | `PUT /api/financial-year-settings/current` | Done |
+| `POST /financial-year-settings/years` | `POST /api/financial-year-settings/years` | Done |
+| `POST /financial-year-settings/years/{id}/close` | `POST /api/financial-year-settings/years/{id}/close` | Done |
+
+## Registrations (pre-admission)
+
+| Frontend proxy path | ASP.NET | Status |
+|---------------------|---------|--------|
+| `GET /registrations` | `GET /api/registrations?status=` | Done |
+| `GET /registrations/{id}` | `GET /api/registrations/{id}` | Done |
+| `POST /registrations` | `POST /api/registrations` | Done |
+| `PUT /registrations/{id}` | `PUT /api/registrations/{id}` | Done |
+| `POST /registrations/{id}/submit` | `POST /api/registrations/{id}/submit` | Done |
+| `POST /registrations/{id}/convert` | `POST /api/registrations/{id}/convert` → admission | Done |
+
+## Promotions
+
+| Frontend proxy path | ASP.NET | Status |
+|---------------------|---------|--------|
+| `POST /promotions/bulk` | `POST /api/promotions/bulk` | Done |
+| `POST /promotions/batches/{id}/rollback` | `POST /api/promotions/batches/{id}/rollback` | Done |
+| `GET /promotions/batches` | `GET /api/promotions/batches` | Done |
+
 ## Students (`lib/api/students.ts`)
+
+Student **master** record; class/section/roll live on **enrollments** per academic year.
 
 | Frontend proxy path | ASP.NET | Status |
 |---------------------|---------|--------|
@@ -39,6 +91,9 @@ Base URL: `/api` (BFF: `/api/proxy/...` on Next.js)
 | `POST /teachers` | `POST /api/teachers` | Done |
 | `PUT /teachers/{id}` | `PUT /api/teachers/{id}` | Done |
 | `DELETE /teachers/{id}` | `DELETE /api/teachers/{id}` | Done |
+| `GET /teachers/assignments` | `GET /api/teachers/assignments?teacherId=&academicYearId=` | Done |
+| `POST /teachers/assignments` | `POST /api/teachers/assignments` | Done |
+| `DELETE /teachers/assignments/{id}` | `DELETE /api/teachers/assignments/{id}` | Done |
 
 ## Parents (`lib/api/parents.ts`)
 
@@ -69,6 +124,7 @@ Base URL: `/api` (BFF: `/api/proxy/...` on Next.js)
 | `PUT /admissions/{id}` | `PUT /api/admissions/{id}` | Done (draft only) |
 | `POST /admissions/{id}/submit` | `POST /api/admissions/{id}/submit` | Done |
 | `PATCH /admissions/{id}/status` | `PATCH /api/admissions/{id}/status` | Done (admin) |
+| `POST /admissions/{id}/approve` | `POST /api/admissions/{id}/approve` | Done → creates student + enrollment |
 | `POST /admissions/{id}/documents` | `POST /api/admissions/{id}/documents` | Done (metadata) |
 
 ## Attendance (`lib/api/attendance.ts`)
@@ -100,6 +156,15 @@ Base URL: `/api` (BFF: `/api/proxy/...` on Next.js)
 | `POST /exams` | `POST /api/exams` | Done |
 | `PUT /exams/{id}` | `PUT /api/exams/{id}` | Done |
 | `DELETE /exams/{id}` | `DELETE /api/exams/{id}` | Done |
+| `GET /exams/results` | `GET /api/exams/results?examId=&studentId=&academicYearId=` | Done |
+| `POST /exams/results` | `POST /api/exams/results` | Done |
+
+## Assignments (homework)
+
+| Frontend proxy path | ASP.NET | Status |
+|---------------------|---------|--------|
+| `GET /assignments` | `GET /api/assignments?className=` | Done |
+| `POST /assignments` | `POST /api/assignments` | Done (creates per-student rows) |
 
 ## Timetable (`lib/api/timetable.ts`)
 
@@ -186,7 +251,8 @@ Base URL: `/api` (BFF: `/api/proxy/...` on Next.js)
 
 | Frontend proxy path | ASP.NET | Status |
 |---------------------|---------|--------|
-| `GET /students/me/*` | `GET /api/students/me`, `/fees`, `/attendance`, `/exams`, `/timetable`, `/library/issues` | Done |
+| `GET /students/me/*` | `GET /api/students/me`, `/fees`, `/attendance`, `/exams`, `/assignments`, `/timetable`, `/library/issues` | Done |
+| `POST /students/me/assignments/{id}/submit` | `POST /api/students/me/assignments/{id}/submit` | Done |
 | `GET /teachers/me/*` | `GET /api/teachers/me`, `/leaves`, `/payroll`, `/timetable` | Done |
 | `GET /parents/me/*` | `GET /api/parents/me`, `/children`, `/children/{id}/fees`, `/children/{id}/attendance` | Done |
 
@@ -343,3 +409,11 @@ Queries: `students`, `studentById`, `dashboard`.
 | `Redis:Enabled` | Distributed cache + rate limit + SignalR scale-out |
 | `ConnectionStrings:ReadConnection` | SQL read replica for heavy list/report/dashboard queries |
 | `Database:UseReadReplica` | Route read factory to replica connection |
+
+## Architecture tests
+
+```bash
+dotnet test tests/EduSync.ArchitectureTests
+```
+
+Validates module/layer dependency rules (NetArchTest). Run in CI alongside unit tests.

@@ -86,7 +86,7 @@ public sealed class CreateTeacherCommandHandler(EduSyncDbContext db, ITenantCont
             ExperienceYears = body.Experience,
             Salary = body.Salary,
             JoiningDate = DateOnly.TryParse(body.JoiningDate, out var jd) ? jd : null,
-            Status = body.Status,
+            LifecycleStatus = body.Status,
             ClassesJson = TeacherMapping.SerializeClasses(body.Classes),
         };
 
@@ -120,7 +120,7 @@ public sealed class UpdateTeacherCommandHandler(EduSyncDbContext db)
         if (body.Experience is not null) teacher.ExperienceYears = body.Experience.Value;
         if (body.Salary is not null) teacher.Salary = body.Salary.Value;
         if (body.JoiningDate is not null && DateOnly.TryParse(body.JoiningDate, out var jd)) teacher.JoiningDate = jd;
-        if (body.Status is not null) teacher.Status = body.Status;
+        if (body.Status is not null) teacher.LifecycleStatus = body.Status;
         if (body.Classes is not null) teacher.ClassesJson = TeacherMapping.SerializeClasses(body.Classes);
 
         await db.SaveChangesAsync(cancellationToken);

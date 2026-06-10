@@ -7,6 +7,7 @@ public sealed record GetStudentPortalProfileQuery : IRequest<Result<object>>;
 public sealed record GetStudentPortalFeesQuery : IRequest<Result<object>>;
 public sealed record GetStudentPortalAttendanceQuery : IRequest<Result<object>>;
 public sealed record GetStudentPortalExamsQuery : IRequest<Result<object>>;
+public sealed record GetStudentPortalAssignmentsQuery : IRequest<Result<object>>;
 public sealed record GetStudentPortalTimetableQuery : IRequest<Result<object>>;
 public sealed record GetStudentPortalLibraryQuery : IRequest<Result<object>>;
 

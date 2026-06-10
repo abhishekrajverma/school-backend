@@ -73,8 +73,8 @@ sequenceDiagram
     participant Handler
     participant DbContext
 
-    Client->>Middleware: HTTP + JWT + X-Tenant-Id
-    Note over Middleware: CorrelationId, Region, Chaos,<br/>RateLimit, Tenant, Audit
+    Client->>Middleware: HTTP + JWT + X-Tenant-Id<br/>+ optional X-Branch-Id, X-Academic-Year-Id
+    Note over Middleware: CorrelationId, Region, Chaos,<br/>RateLimit, TenantAuth, BranchAuth,<br/>AcademicYear, Audit
     Middleware->>AuthZ: JWT role claim
     Note over AuthZ: Policy = permission id<br/>e.g. students.read
     AuthZ->>Endpoint: allowed
@@ -144,7 +144,12 @@ school-erp-backend/
 | `TeacherEndpoints.cs` | `/api/teachers` | Staff / teachers |
 | `ParentEndpoints.cs` | `/api/parents` | Parents |
 | `AcademicsEndpoints.cs` | `/api/classes`, subjects | Classes & subjects |
-| `AdmissionEndpoints.cs` | `/api/admissions` | Admissions workflow |
+| `AdmissionEndpoints.cs` | `/api/admissions` | Admissions workflow + approve |
+| `RegistrationEndpoints.cs` | `/api/registrations` | Pre-admission registrations |
+| `BranchEndpoints.cs` | `/api/branches` | Branches + branch memberships |
+| `PromotionEndpoints.cs` | `/api/promotions` | Bulk promote / rollback |
+| `FinancialYearEndpoints.cs` | `/api/financial-year-settings` | Academic years + current year |
+| `AssignmentEndpoints.cs` | `/api/assignments` | Class assignments (homework) |
 | `AttendanceEndpoints.cs` | `/api/attendance` | Attendance mark/list |
 | `FeesEndpoints.cs` | `/api/fees`, payments | Fees & payments |
 | `ExamEndpoints.cs` | `/api/exams` | Exams |
@@ -204,7 +209,14 @@ Most routes call `.RequirePermission(Permissions.*)` on each `MapGet` / `MapPost
 | `Application/Staff/` | Teachers |
 | `Application/Parents/` | Parents |
 | `Application/Academics/` | Classes, subjects |
-| `Application/Admissions/` | Admissions |
+| `Application/Admissions/` | Admissions + registrations |
+| `Application/Tenancy/AcademicYearHandlers.cs` | Create / close academic year |
+| `Application/Tenancy/BranchMembershipHandlers.cs` | Branch-level role assignments |
+| `Application/Tenancy/BranchHandlers.cs` | Branch CRUD |
+| `Application/Students/PromotionHandlers.cs` | Bulk promotion batches |
+| `Application/Staff/TeacherAssignmentHandlers.cs` | Teacher ↔ class/subject assignments |
+| `Application/Exams/ExamResultHandlers.cs` | Per-student exam marks |
+| `Application/Assignments/` | Homework assignments + student submissions |
 | `Application/Attendance/` | Attendance |
 | `Application/Fees/` | Fees & payments |
 | `Application/Exams/` | Exams |
@@ -235,7 +247,8 @@ Every feature module follows the same layout. **Handlers live in Infrastructure*
 ```
 EduSync.Modules.Students/
 ├── Domain/
-│   └── Student.cs              ← DB entity shape, properties
+│   ├── Student.cs              ← DB entity shape, properties
+│   └── Student.Domain.cs       ← Optional: domain behavior (Submit, Approve, etc.)
 ├── Application/
 │   ├── Commands/               ← CreateStudentCommand, Update…
 │   ├── Queries/                ← ListStudentsQuery, GetById…
@@ -272,7 +285,8 @@ After changing `Domain/`, you almost always need:
 | `EduSync.Modules.Admissions` | Admission applications |
 | `EduSync.Modules.Attendance` | Attendance records |
 | `EduSync.Modules.Fees` | Fee invoices & payments |
-| `EduSync.Modules.Exams` | Exams |
+| `EduSync.Modules.Exams` | Exams + exam results |
+| `EduSync.Modules.Assignments` | Homework assignments |
 | `EduSync.Modules.Timetable` | Timetable |
 | `EduSync.Modules.Notifications` | Notifications |
 | `EduSync.Modules.Payroll` | Payroll |
@@ -300,7 +314,8 @@ After changing `Domain/`, you almost always need:
 | `Results/Result.cs`, `Error.cs` | Success/failure pattern for handlers |
 | `Pagination/` | `PaginationQuery`, `PaginatedList` |
 | `Entities/` | `TenantEntity`, `AuditableEntity` base classes |
-| `Constants/HttpHeaders.cs` | `X-Tenant-Id`, `X-Region`, `X-Correlation-Id` |
+| `Constants/HttpHeaders.cs` | `X-Tenant-Id`, `X-Branch-Id`, `X-Academic-Year-Id`, `X-Region`, `X-Correlation-Id` |
+| `Entities/BranchEntity.cs` | Tenant + branch scoped entities |
 | `Abstractions/ITenantEntity.cs` | Marks entities that get tenant SQL filter |
 
 ---
@@ -322,7 +337,7 @@ Change when frontend should hit gateway port **5100** instead of API **5000**.
 |------|---------|
 | `tests/EduSync.IntegrationTests/` | SQL Testcontainers, tenant isolation, RBAC (e.g. student → 403 on `/api/students`) |
 | `tests/EduSync.UnitTests/` | Unit tests incl. `RolePermissionsTests` |
-| `tests/EduSync.ArchitectureTests/` | Layer dependency rules |
+| `tests/EduSync.ArchitectureTests/` | NetArchTest: modules ↛ Infrastructure/Api, domain ↛ MediatR |
 | `docker-compose.yml` | SQL Server, Redis, API, Gateway |
 | `Dockerfile` / `Dockerfile.gateway` | Container images |
 
@@ -336,8 +351,15 @@ Use this table first. Then open the **Endpoint** (URL) and matching **Handler**.
 |----------------|---------------|
 | **New REST endpoint** | `Api/Endpoints/{Feature}Endpoints.cs`, `Api/Extensions/ApiEndpointExtensions.cs`, Module `Application/Commands` or `Queries`, `Infrastructure/Application/{Feature}/*Handlers.cs` |
 | **Change URL or HTTP method** | `Api/Endpoints/*Endpoints.cs` only |
-| **401 / 403 / tenant not found** | `Middleware/TenantResolutionMiddleware.cs`, `Application/Identity/`, request headers `X-Tenant-Id` |
-| **403 but tenant is correct (role)** | `Modules.Identity/Authorization/Permissions.cs`, `RolePermissions.cs`, endpoint `.RequirePermission(...)`, JWT `ClaimTypes.Role` from **tenant membership** |
+| **401 / 403 / tenant not found** | `Middleware/TenantResolutionMiddleware.cs`, `TenantAuthorizationMiddleware.cs`, headers `X-Tenant-Id` |
+| **403 branch access denied** | `BranchAuthorizationMiddleware.cs`, `identity.BranchMemberships`, or use admin/principal role |
+| **403 but tenant is correct (role)** | `Modules.Identity/Authorization/Permissions.cs`, `RolePermissions.cs`, endpoint `.RequirePermission(...)`, role from **tenant membership** via `HttpContext.Items["tenant_role"]` |
+| **Wrong class/year on student** | `StudentEnrollments` + `IAcademicYearContext`; not `Students.ClassName` (removed) |
+| **Registration → admission** | `RegistrationHandlers.cs`, `Registration.Domain.cs`, `POST /api/registrations/{id}/convert` |
+| **Admission approve → student** | `AdmissionHandlers.ApproveAdmissionCommandHandler`, outbox `admission.approved` |
+| **Promotion bulk** | `PromotionHandlers.cs`, `PromotionBatch` entities |
+| **Exam marks per student** | `ExamResultHandlers.cs`, `exams.ExamResults` |
+| **Homework assignments** | `AssignmentHandlers.cs`, `EduSync.Modules.Assignments` |
 | **Login / JWT / password** | `Application/Identity/LoginCommandHandler.cs`, `Modules.Identity/Infrastructure/JwtTokenService.cs`, `appsettings` `Jwt` |
 | **OIDC / SSO login** | `AuthEndpoints.cs`, `Application/Identity/OidcLoginCommandHandler.cs`, `Security/OidcTokenValidator.cs`, `Oidc` config |
 | **Wrong data for one school only** | Tenant filter — entity must implement `ITenantEntity`; check `TenantId` in handler |
@@ -401,9 +423,13 @@ Order in `Program.cs` (first to last for incoming request):
 7. CORS → Authentication → Authorization  
 8. `TenantRateLimitMiddleware`  
 9. `TenantResolutionMiddleware`  
-10. `AuditLoggingMiddleware` (runs after endpoint; logs on way out)  
+10. `TenantAuthorizationMiddleware` (JWT tenant vs header, membership role)  
+11. `BranchResolutionMiddleware`  
+12. `BranchAuthorizationMiddleware` (branch membership or tenant-wide roles)  
+13. `AcademicYearResolutionMiddleware`  
+14. `AuditLoggingMiddleware` (runs after endpoint; logs on way out)  
 
-If tenant is missing, fix **step 9** and client headers before handlers.
+If tenant is missing, fix **step 9** and client headers before handlers. Branch 403 → check **step 12** and `X-Branch-Id`.
 
 ---
 
@@ -443,7 +469,7 @@ Permission-based access control is **enforced on every protected API route** (an
 |------|--------|
 | `admin` | All permissions, including `webhooks.manage`, `retention.manage`, `chaos.read` |
 | `principal` | Full school operations (students, fees, payroll, imports, jobs, audit, …) — **not** admin-only permissions above |
-| `teacher` | Read students; write attendance/exams; read/write library; leave create; dashboard & reports; uploads; **teacher portal only** |
+| `teacher` | Read students; write attendance/exams/**assignments**; read/write library; leave create; dashboard & reports; uploads; **teacher portal only** |
 | `student` | **Student portal** (`/api/students/me/*`) + `tenants.read` |
 | `parent` | **Parent portal** (`/api/parents/me/*`) + `tenants.read` |
 
@@ -454,8 +480,9 @@ Roles are defined in `Modules.Identity/Domain/UserRole.cs` (`UserRoles` constant
 1. **Login** (`POST /api/auth/login`) loads the user’s active `TenantMembership` and puts **`membership.Role`** into the JWT (`ClaimTypes.Role`), not `User.Role`.
 2. **Authorization** runs after authentication (`Program.cs` order: Authentication → Authorization → tenant middleware).
 3. Each route uses `.RequirePermission("resource.action")` — the policy name **is** the permission string.
-4. `PermissionAuthorizationHandler` resolves the role from the JWT and checks `RolePermissions.HasPermission(role, permission)`.
-5. **`GET /api/auth/me`** returns `user.role` and `user.permissions[]` for the Next.js dashboard to hide menus/actions.
+4. `PermissionAuthorizationHandler` reads `HttpContext.Items["tenant_role"]` (set by `TenantAuthorizationMiddleware`) and checks `RolePermissions.HasPermission(role, permission)`.
+5. When `X-Branch-Id` is set, `BranchAuthorizationMiddleware` sets `HttpContext.Items["branch_role"]` from `BranchMemberships` (admin/principal bypass).
+6. **`GET /api/auth/me`** returns `user.role` and `user.permissions[]` for the Next.js dashboard to hide menus/actions.
 
 ### Demo users (tenant `demo-school-001`)
 
@@ -480,7 +507,10 @@ Always send `X-Tenant-Id: demo-school-001` (or your tenant slug/external id) wit
 | Admissions (staff) | `admissions.read` | `admissions.manage` (status patch); public apply routes stay **anonymous** |
 | Attendance | `attendance.read` | `attendance.write` |
 | Fees / payments | `fees.read`, `payments.read` | `fees.write` |
-| Exams | `exams.read` | `exams.write` |
+| Exams | `exams.read` | `exams.write` (+ `GET/POST /api/exams/results`) |
+| Assignments | `assignments.read` | `assignments.write` |
+| Financial year | `financial-year.read` | `financial-year.write` (create/close academic years) |
+| Tenants / branches | `tenants.read` | `tenants.manage` (provision, branches, memberships) |
 | Timetable | `timetable.read` | `timetable.write` |
 | Notifications | `notifications.read` | `notifications.write` |
 | Payroll | `payroll.read` | `payroll.write`, `payroll.process` |
@@ -532,7 +562,34 @@ Hangfire dashboard (`/hangfire`): non-dev requires `jobs.run` (see `HangfireDash
 3. Apply `.RequirePermission(Permissions.YourPermission)` on the route (or `[Authorize(Policy = ...)]` in GraphQL).  
 4. Extend `RolePermissionsTests` and hit the API with two roles in `EduSync.http`.  
 
-**Not in scope today:** per-tenant custom roles stored in SQL (matrix is code-defined). To add that later, introduce role/permission tables and replace `RolePermissions` with a DB-backed `IPermissionService`.
+**Branch RBAC:** Tenant roles (`TenantMemberships`) gate API permissions. Branch roles (`BranchMemberships`) gate access when `X-Branch-Id` is resolved. `TenantRolePolicy.HasTenantWideBranchAccess` grants admin/principal access to all branches.
+
+**Not in scope today:** per-tenant custom permission matrix in SQL (roles are code-defined in `RolePermissions`). Branch membership rows are stored in SQL.
+
+### Domain-driven design (partial)
+
+Rich behavior lives on **partial** domain classes (e.g. `AdmissionApplication.Domain.cs`):
+
+| Entity | Methods |
+|--------|---------|
+| `AdmissionApplication` | `Submit()`, `TransitionTo()`, `Approve()` |
+| `Registration` | `Submit()`, `Verify()`, `Cancel()`, `MarkConverted()` |
+| `Student` | `SetLifecycleStatus()`, `MarkActive()`, `MarkInactive()`, `CanBePromoted()` |
+| `AcademicYear` | `Create()`, `Close()`, `SetAsCurrent()` |
+
+Handlers should call these methods instead of mutating status fields inline.
+
+### Architecture tests
+
+```bash
+dotnet test tests/EduSync.ArchitectureTests
+```
+
+Rules in `tests/EduSync.ArchitectureTests/LayerArchitectureTests.cs`:
+
+- Module assemblies must not reference `EduSync.Infrastructure` or `EduSync.Api`
+- `EduSync.Infrastructure` must not reference `EduSync.Api`
+- Domain namespace types must not reference MediatR
 
 ---
 
@@ -568,4 +625,4 @@ This does not affect runtime behavior.
 
 ---
 
-*Last updated: phases 1–10, full permission-based RBAC on REST + GraphQL, JWT tenant membership role, demo users, and Windows line-ending note.*
+*Last updated: phases 1–12 — multi-branch ERP (enrollments, registrations, promotion), branch RBAC, exam results, assignments module, domain methods, NetArchTest architecture tests.*

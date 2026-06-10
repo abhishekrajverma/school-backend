@@ -1,5 +1,6 @@
 using EduSync.Infrastructure.Pagination;
 using EduSync.Infrastructure.Persistence;
+using EduSync.Infrastructure.Tenancy;
 using EduSync.Modules.Events.Application;
 using EduSync.SharedKernel.Pagination;
 using EduSync.SharedKernel.Results;
@@ -23,12 +24,16 @@ internal static class OutboxMapping
         m.Error);
 }
 
-public sealed class ListOutboxMessagesQueryHandler(EduSyncDbContext db)
+public sealed class ListOutboxMessagesQueryHandler(EduSyncDbContext db, ITenantContext tenant)
     : IRequestHandler<ListOutboxMessagesQuery, Result<PaginatedList<OutboxMessageDto>>>
 {
     public async Task<Result<PaginatedList<OutboxMessageDto>>> Handle(ListOutboxMessagesQuery request, CancellationToken ct)
     {
         var query = db.OutboxMessages.AsNoTracking().AsQueryable();
+        if (tenant.TenantId.HasValue)
+        {
+            query = query.Where(m => m.TenantId == tenant.TenantId);
+        }
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
             query = query.Where(m => m.Status == request.Status);

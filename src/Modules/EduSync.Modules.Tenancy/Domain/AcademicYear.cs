@@ -1,6 +1,8 @@
+using EduSync.SharedKernel.Abstractions;
+
 namespace EduSync.Modules.Tenancy.Domain;
 
-public sealed class AcademicYear
+public sealed partial class AcademicYear : ITenantEntity
 {
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }

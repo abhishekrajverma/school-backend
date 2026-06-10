@@ -6,6 +6,7 @@ using EduSync.Modules.Imports.Application;
 using EduSync.Modules.Identity.Domain;
 using EduSync.Modules.Staff.Domain;
 using EduSync.Modules.Students.Domain;
+using EduSync.SharedKernel.Constants;
 using EduSync.SharedKernel.Results;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -63,12 +64,19 @@ internal static class CsvImportHelper
     }
 }
 
-public sealed class ImportStudentsCsvCommandHandler(EduSyncDbContext db, ITenantContext tenant)
+public sealed class ImportStudentsCsvCommandHandler(
+    EduSyncDbContext db,
+    ITenantContext tenant,
+    IBranchContext branch,
+    IAcademicYearContext academicYear)
     : IRequestHandler<ImportStudentsCsvCommand, Result<ImportResultDto>>
 {
     public async Task<Result<ImportResultDto>> Handle(ImportStudentsCsvCommand request, CancellationToken ct)
     {
-        if (!tenant.TenantId.HasValue) return Result<ImportResultDto>.Failure(Error.Forbidden("Tenant required."));
+        if (!tenant.TenantId.HasValue || !branch.BranchId.HasValue || !academicYear.AcademicYearId.HasValue)
+        {
+            return Result<ImportResultDto>.Failure(Error.Forbidden("Tenant, branch, and academic year are required."));
+        }
         var rows = CsvImportHelper.Parse(request.CsvStream);
         var imported = 0;
         var skipped = 0;
@@ -93,21 +101,32 @@ public sealed class ImportStudentsCsvCommandHandler(EduSyncDbContext db, ITenant
                 continue;
             }
 
+            var studentId = Guid.NewGuid();
             db.Students.Add(new Student
             {
-                Id = Guid.NewGuid(),
+                Id = studentId,
                 TenantId = tenant.TenantId.Value,
                 ExternalId = Guid.NewGuid().ToString("N")[..12],
                 FirstName = firstName,
                 LastName = lastName,
                 Email = string.IsNullOrWhiteSpace(email) ? $"{admissionNo}@import.local" : email,
                 Phone = CsvImportHelper.Get(row, "Phone", "phone"),
+                AdmissionNo = admissionNo,
+                LifecycleStatus = LifecycleStatuses.Active,
+            });
+            db.StudentEnrollments.Add(new StudentEnrollment
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenant.TenantId.Value,
+                BranchId = branch.BranchId.Value,
+                ExternalId = Guid.NewGuid().ToString("N")[..12],
+                StudentId = studentId,
+                AcademicYearId = academicYear.AcademicYearId.Value,
                 ClassName = CsvImportHelper.Get(row, "Class", "class") is { Length: > 0 } c ? c : "N/A",
                 Section = CsvImportHelper.Get(row, "Section", "section") is { Length: > 0 } s ? s : "A",
                 RollNo = CsvImportHelper.Get(row, "RollNo", "roll_no") is { Length: > 0 } r ? r : admissionNo,
-                AdmissionNo = admissionNo,
-                ParentEmail = CsvImportHelper.Get(row, "ParentEmail", "parent_email"),
-                Status = "active",
+                EnrollmentStatus = EnrollmentStatuses.Enrolled,
+                EnrolledAt = DateTime.UtcNow,
             });
             imported++;
         }
@@ -164,7 +183,7 @@ public sealed class ImportTeachersCsvCommandHandler(EduSyncDbContext db, ITenant
                 ExperienceYears = int.TryParse(CsvImportHelper.Get(row, "Experience", "experience"), out var exp) ? exp : 0,
                 Salary = salary,
                 JoiningDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                Status = "active",
+                LifecycleStatus = "active",
                 ClassesJson = "[]",
             });
             imported++;

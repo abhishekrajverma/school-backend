@@ -62,6 +62,18 @@ public sealed class ProvisionTenantCommandHandler(
             IsCurrent = true,
         };
 
+        var headBranch = new Branch
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ExternalId = slug.Replace('-', '_') + "_main",
+            Code = "MAIN",
+            Name = request.SchoolName.Trim(),
+            IsHeadOffice = true,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+        };
+
         var adminUser = new User
         {
             Id = Guid.NewGuid(),
@@ -89,6 +101,7 @@ public sealed class ProvisionTenantCommandHandler(
 
         db.Tenants.Add(tenant);
         db.AcademicYears.Add(academicYear);
+        db.Branches.Add(headBranch);
         db.Users.Add(adminUser);
         await db.SaveChangesAsync(cancellationToken);
 

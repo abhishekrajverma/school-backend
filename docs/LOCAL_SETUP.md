@@ -124,6 +124,16 @@ Expect **all PASS** (health, admin login, students list, RBAC 403 for student, s
 
 ```http
 X-Tenant-Id: demo-school-001
+Authorization: Bearer {accessToken}
+```
+
+Optional (multi-branch / academic year):
+
+```http
+X-Branch-Id: {branch-external-id}
+X-Financial-Year: 2025-26
+# or
+X-Academic-Year-Id: {guid}
 ```
 
 **Login** (`POST /api/auth/login`):
@@ -191,8 +201,10 @@ Tenant header: **`demo-school-001`**
 |---------|-----|
 | Cannot connect to SQL | Docker running? `docker compose up -d sqlserver`; wait for healthy |
 | Login fails | DB migrated? Seed ran? Check API console for errors |
-| 403 on API | Missing `X-Tenant-Id: demo-school-001` |
+| 403 on API | Missing `X-Tenant-Id: demo-school-001` or JWT tenant mismatch |
+| 403 with branch header | User lacks `identity.BranchMemberships` for that branch (admin/principal bypass) |
 | 403 as student on `/api/students` | Expected (RBAC); use `/api/students/me` |
+| New tables missing | Run `dotnet ef database update` (migrations `ErpArchitectureRemediation`, `FuturePhases`) |
 | Port 5000 in use | Change `launchSettings.json` or stop other app |
 | Migration error | `dotnet ef database update` again; drop DB only if dev reset OK |
 

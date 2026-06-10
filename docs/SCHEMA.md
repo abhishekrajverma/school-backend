@@ -10,7 +10,8 @@ Shared database, schema-separated modules. All tenant-bound tables include `Tena
 |-------|---------|
 | `Tenants` | School tenant: Id, ExternalId, Slug, Name, LogoUrl, Status |
 | `TenantSubscriptions` | PlanId, SeatLimit, ExpiresAt, FeatureFlagsJson |
-| `AcademicYears` | Indian Apr–Mar year per tenant |
+| `AcademicYears` | Apr–Mar (or custom) year per tenant; `IsCurrent`, start/end dates |
+| `Branches` | Physical/logical campus per tenant; `Code`, `ExternalId`, address |
 
 ## `identity`
 
@@ -18,27 +19,35 @@ Shared database, schema-separated modules. All tenant-bound tables include `Tena
 |-------|---------|
 | `Users` | Global user; ExternalId for frontend `userId` |
 | `TenantMemberships` | User ↔ Tenant + role |
+| `BranchMemberships` | User ↔ Branch + branch role (when `X-Branch-Id` access control applies) |
 | `RefreshTokens` | Hashed rotating refresh tokens |
 
 ## `students`
 
 | Table | Purpose |
 |-------|---------|
-| `Students` | Tenant-scoped student records; soft delete via `IsDeleted` |
+| `Students` | **Master** student identity: name, admission no, `LifecycleStatus`, PII (optional encryption) |
+| `Enrollments` | Per **branch + academic year**: class, section, roll, enrollment status |
+| `PromotionBatches` | Bulk promotion run metadata |
+| `PromotionBatchItems` | Per-student promotion outcome in a batch |
 
-Indexes: leading `TenantId` on filtered tables; unique `(TenantId, ExternalId)`, `(TenantId, AdmissionNo)`.
+**Note:** Class/section/roll are **not** on `Students` (removed in `ErpArchitectureRemediation`). Query via `Enrollments` for the active academic year.
+
+Indexes: leading `TenantId`; unique `(TenantId, ExternalId)`, `(TenantId, AdmissionNo)` on students.
 
 ## `staff`
 
 | Table | Purpose |
 |-------|---------|
-| `Teachers` | Staff / teachers; `ClassesJson` for assigned classes |
+| `Teachers` | Staff / teachers; `LifecycleStatus` |
+| `TeacherAssignments` | Teacher ↔ class/subject per branch + academic year |
 
 ## `parents`
 
 | Table | Purpose |
 |-------|---------|
-| `Parents` | Guardian records; `ChildrenJson`, `StudentIdsJson` |
+| `Parents` | Guardian master records |
+| `StudentParents` | Normalized parent ↔ student links (replaces JSON children lists) |
 
 ## `academics`
 
@@ -51,7 +60,10 @@ Indexes: leading `TenantId` on filtered tables; unique `(TenantId, ExternalId)`,
 
 | Table | Purpose |
 |-------|---------|
-| `Applications` | Multi-step form in `FormDataJson`; documents in `DocumentsJson`; status workflow |
+| `Registrations` | Pre-admission enquiry/registration (draft → submitted → verified → converted) |
+| `RegistrationDocuments` | Documents attached to registrations |
+| `Applications` | Admission applications; links optional `RegistrationId`; `AcademicYearId`, `BranchId` |
+| `AdmissionApprovals` | Approval audit trail per application |
 
 ## `attendance`
 
@@ -71,6 +83,14 @@ Indexes: leading `TenantId` on filtered tables; unique `(TenantId, ExternalId)`,
 | Table | Purpose |
 |-------|---------|
 | `Exams` | Exam schedule: subject, class, date, marks, status |
+| `ExamResults` | Per-student marks for an exam + academic year |
+
+## `assignments`
+
+| Table | Purpose |
+|-------|---------|
+| `Assignments` | Homework/task per class, branch, academic year |
+| `StudentAssignments` | Per-student submission status, text, score |
 
 ## `timetable`
 

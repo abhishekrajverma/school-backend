@@ -16,3 +16,5 @@ public sealed record RegisterAdmissionDocumentCommand(string ExternalId, Registe
     : IRequest<Result<AdmissionDocumentDto>>;
 
 public sealed record SubmitAdmissionCommand(string ExternalId) : IRequest<Result<AdmissionDetailDto>>;
+public sealed record ApproveAdmissionCommand(string ExternalId, ApproveAdmissionRequest? Request)
+    : IRequest<Result<AdmissionDetailDto>>;

@@ -10,6 +10,7 @@
     <Project Path="src/Modules/EduSync.Modules.Admissions/EduSync.Modules.Admissions.csproj" />
     <Project Path="src/Modules/EduSync.Modules.Attendance/EduSync.Modules.Attendance.csproj" />
     <Project Path="src/Modules/EduSync.Modules.Exams/EduSync.Modules.Exams.csproj" />
+    <Project Path="src/Modules/EduSync.Modules.Assignments/EduSync.Modules.Assignments.csproj" />
     <Project Path="src/Modules/EduSync.Modules.Fees/EduSync.Modules.Fees.csproj" />
     <Project Path="src/Modules/EduSync.Modules.Identity/EduSync.Modules.Identity.csproj" />
     <Project Path="src/Modules/EduSync.Modules.Notifications/EduSync.Modules.Notifications.csproj" />

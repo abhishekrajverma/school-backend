@@ -1,13 +1,17 @@
 using System.Security.Claims;
+using EduSync.Infrastructure.Persistence;
 using EduSync.Infrastructure.Tenancy;
 using EduSync.SharedKernel.Constants;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 
 namespace EduSync.Api.SignalR;
 
 [Authorize]
-public sealed class NotificationsHub(ITenantContext tenantContext) : Hub
+public sealed class NotificationsHub(
+    ITenantContext tenantContext,
+    EduSyncDbContext db) : Hub
 {
     public const string HubPath = "/hubs/notifications";
     public const string EventCreated = "notification.created";
@@ -18,6 +22,23 @@ public sealed class NotificationsHub(ITenantContext tenantContext) : Hub
         var tenantKey = http?.Request.Query["tenant_id"].FirstOrDefault()
             ?? http?.Request.Headers[HttpHeaders.TenantId].FirstOrDefault()
             ?? tenantContext.TenantExternalId;
+
+        var userIdClaim = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? Context.User?.FindFirstValue("sub");
+
+        if (!string.IsNullOrWhiteSpace(tenantKey)
+            && userIdClaim is not null
+            && Guid.TryParse(userIdClaim, out var userId)
+            && tenantContext.TenantId.HasValue)
+        {
+            var isMember = await db.TenantMemberships.AsNoTracking()
+                .AnyAsync(m => m.TenantId == tenantContext.TenantId && m.UserId == userId && m.IsActive);
+            if (!isMember)
+            {
+                Context.Abort();
+                return;
+            }
+        }
 
         if (!string.IsNullOrWhiteSpace(tenantKey))
         {
@@ -30,11 +51,9 @@ public sealed class NotificationsHub(ITenantContext tenantContext) : Hub
             await Groups.AddToGroupAsync(Context.ConnectionId, AudienceGroup(tenantKey, audience));
         }
 
-        var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? Context.User?.FindFirstValue("sub");
-        if (!string.IsNullOrWhiteSpace(tenantKey) && !string.IsNullOrWhiteSpace(userId))
+        if (!string.IsNullOrWhiteSpace(tenantKey) && !string.IsNullOrWhiteSpace(userIdClaim))
         {
-            await Groups.AddToGroupAsync(Context.ConnectionId, UserGroup(tenantKey, userId));
+            await Groups.AddToGroupAsync(Context.ConnectionId, UserGroup(tenantKey, userIdClaim));
         }
 
         await base.OnConnectedAsync();

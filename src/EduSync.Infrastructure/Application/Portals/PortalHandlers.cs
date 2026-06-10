@@ -1,6 +1,9 @@
+using EduSync.Infrastructure.Application.Students;
 using EduSync.Infrastructure.Application.Transport;
 using EduSync.Infrastructure.Persistence;
 using EduSync.Infrastructure.Tenancy;
+using EduSync.Modules.Assignments.Application;
+using EduSync.SharedKernel.Constants;
 using EduSync.Modules.Portals.Application;
 using EduSync.SharedKernel.Results;
 using MediatR;
@@ -8,7 +11,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EduSync.Infrastructure.Application.Portals;
 
-public sealed class GetStudentPortalProfileQueryHandler(EduSyncDbContext db, ICurrentUserContext user)
+public sealed class GetStudentPortalProfileQueryHandler(
+    EduSyncDbContext db,
+    ICurrentUserContext user,
+    IAcademicYearContext academicYear,
+    IBranchContext branch)
     : IRequestHandler<GetStudentPortalProfileQuery, Result<object>>
 {
     public async Task<Result<object>> Handle(GetStudentPortalProfileQuery request, CancellationToken ct)
@@ -18,16 +25,21 @@ public sealed class GetStudentPortalProfileQueryHandler(EduSyncDbContext db, ICu
         var student = await db.Students.AsNoTracking()
             .FirstOrDefaultAsync(s => s.ExternalId == user.UserExternalId && !s.IsDeleted, ct);
         if (student is null) return Result<object>.Failure(Error.NotFound("Student profile not found."));
+
+        var enrollmentQuery = db.StudentEnrollments.AsNoTracking()
+            .Where(e => e.StudentId == student.Id && e.EnrollmentStatus == EnrollmentStatuses.Enrolled && !e.IsDeleted);
+        enrollmentQuery = StudentEnrollmentHelper.ActiveEnrollments(enrollmentQuery, academicYear, branch);
+        var enrollment = await enrollmentQuery.OrderByDescending(e => e.EnrolledAt).FirstOrDefaultAsync(ct);
+
         return Result<object>.Success(new
         {
             id = student.ExternalId,
             firstName = student.FirstName,
             lastName = student.LastName,
-            className = student.ClassName,
-            section = student.Section,
-            rollNo = student.RollNo,
+            className = enrollment?.ClassName ?? string.Empty,
+            section = enrollment?.Section ?? string.Empty,
+            rollNo = enrollment?.RollNo ?? string.Empty,
             email = student.Email,
-            attendancePercent = student.AttendancePercent,
             avatarUrl = student.AvatarUrl,
         });
     }
@@ -92,11 +104,45 @@ public sealed class GetStudentPortalExamsQueryHandler(EduSyncDbContext db, ICurr
         var student = await db.Students.AsNoTracking()
             .FirstOrDefaultAsync(s => s.ExternalId == user.UserExternalId && !s.IsDeleted, ct);
         if (student is null) return Result<object>.Failure(Error.NotFound("Student not found."));
-        var exams = await db.Exams.AsNoTracking()
-            .Where(e => e.ClassName == student.ClassName && !e.IsDeleted)
-            .Select(e => new { e.ExternalId, e.ExamName, e.Subject, e.Date, e.Status, e.StartTime })
-            .ToListAsync(ct);
+        var enrollment = await db.StudentEnrollments.AsNoTracking()
+            .Where(e => e.StudentId == student.Id && e.EnrollmentStatus == EnrollmentStatuses.Enrolled && !e.IsDeleted)
+            .OrderByDescending(e => e.EnrolledAt)
+            .FirstOrDefaultAsync(ct);
+        var className = enrollment?.ClassName ?? string.Empty;
+        var exams = await (
+            from e in db.Exams.AsNoTracking()
+            join r in db.ExamResults.AsNoTracking()
+                on new { ExamId = e.ExternalId, StudentId = student.ExternalId }
+                equals new { ExamId = r.ExamExternalId, StudentId = r.StudentExternalId }
+                into results
+            from r in results.Where(x => !x.IsDeleted).DefaultIfEmpty()
+            where e.ClassName == className && !e.IsDeleted
+            select new
+            {
+                e.ExternalId,
+                e.ExamName,
+                e.Subject,
+                e.Date,
+                e.Status,
+                e.StartTime,
+                e.TotalMarks,
+                MarksObtained = r != null ? (decimal?)r.MarksObtained : null,
+                Grade = r != null ? r.Grade : null,
+                ResultStatus = r != null ? r.Status : null,
+            }).ToListAsync(ct);
         return Result<object>.Success(exams);
+    }
+}
+
+public sealed class GetStudentPortalAssignmentsQueryHandler(ISender sender)
+    : IRequestHandler<GetStudentPortalAssignmentsQuery, Result<object>>
+{
+    public async Task<Result<object>> Handle(GetStudentPortalAssignmentsQuery request, CancellationToken ct)
+    {
+        var result = await sender.Send(new ListStudentAssignmentsQuery(), ct);
+        return result.IsSuccess
+            ? Result<object>.Success(result.Value!)
+            : Result<object>.Failure(result.Error!);
     }
 }
 
@@ -110,8 +156,13 @@ public sealed class GetStudentPortalTimetableQueryHandler(EduSyncDbContext db, I
         var student = await db.Students.AsNoTracking()
             .FirstOrDefaultAsync(s => s.ExternalId == user.UserExternalId && !s.IsDeleted, ct);
         if (student is null) return Result<object>.Failure(Error.NotFound("Student not found."));
+        var enrollment = await db.StudentEnrollments.AsNoTracking()
+            .Where(e => e.StudentId == student.Id && e.EnrollmentStatus == EnrollmentStatuses.Enrolled && !e.IsDeleted)
+            .OrderByDescending(e => e.EnrolledAt)
+            .FirstOrDefaultAsync(ct);
+        var className = enrollment?.ClassName ?? string.Empty;
         var entries = await db.TimetableEntries.AsNoTracking()
-            .Where(t => t.ClassName == student.ClassName && !t.IsDeleted)
+            .Where(t => t.ClassName == className && !t.IsDeleted)
             .Select(t => new { t.ExternalId, t.Day, t.PeriodsJson })
             .ToListAsync(ct);
         return Result<object>.Success(entries);
@@ -216,8 +267,7 @@ public sealed class GetParentPortalProfileQueryHandler(EduSyncDbContext db, ICur
         var dbUser = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == user.UserId, ct);
         if (dbUser is null) return Result<object>.Failure(Error.NotFound("User not found."));
         var parent = await db.Parents.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.Email == dbUser.Email && !p.IsDeleted, ct)
-            ?? await db.Parents.AsNoTracking().FirstOrDefaultAsync(p => p.ExternalId == "1" && !p.IsDeleted, ct);
+            .FirstOrDefaultAsync(p => p.Email == dbUser.Email && !p.IsDeleted, ct);
         if (parent is null) return Result<object>.Failure(Error.NotFound("Parent profile not found."));
         return Result<object>.Success(new
         {
@@ -230,7 +280,11 @@ public sealed class GetParentPortalProfileQueryHandler(EduSyncDbContext db, ICur
     }
 }
 
-public sealed class GetParentPortalChildrenQueryHandler(EduSyncDbContext db, ICurrentUserContext user)
+public sealed class GetParentPortalChildrenQueryHandler(
+    EduSyncDbContext db,
+    ICurrentUserContext user,
+    IAcademicYearContext academicYear,
+    IBranchContext branch)
     : IRequestHandler<GetParentPortalChildrenQuery, Result<object>>
 {
     public async Task<Result<object>> Handle(GetParentPortalChildrenQuery request, CancellationToken ct)
@@ -242,11 +296,20 @@ public sealed class GetParentPortalChildrenQueryHandler(EduSyncDbContext db, ICu
         var parent = await db.Parents.AsNoTracking()
             .FirstOrDefaultAsync(p => p.Email == dbUser.Email && !p.IsDeleted, ct);
         if (parent is null) return Result<object>.Success(Array.Empty<object>());
-        var studentIds = System.Text.Json.JsonSerializer.Deserialize<List<string>>(parent.StudentIdsJson ?? "[]") ?? [];
-        var children = await db.Students.AsNoTracking()
-            .Where(s => studentIds.Contains(s.ExternalId) && !s.IsDeleted)
-            .Select(s => new { s.ExternalId, s.FirstName, s.LastName, s.ClassName, s.Section, s.RollNo })
+        var studentIds = await db.StudentParents.AsNoTracking()
+            .Where(sp => sp.ParentId == parent.Id && sp.IsActive && !sp.IsDeleted)
+            .Join(db.Students.AsNoTracking(), sp => sp.StudentId, s => s.Id, (sp, s) => s.ExternalId)
             .ToListAsync(ct);
+        var students = await db.Students.AsNoTracking()
+            .Where(s => studentIds.Contains(s.ExternalId) && !s.IsDeleted)
+            .ToListAsync(ct);
+        var enrollments = await StudentEnrollmentHelper.LoadCurrentEnrollmentsAsync(
+            db.StudentEnrollments, students.Select(s => s.Id), academicYear, branch, ct);
+        var children = students.Select(s =>
+        {
+            enrollments.TryGetValue(s.Id, out var e);
+            return new { s.ExternalId, s.FirstName, s.LastName, className = e?.ClassName ?? "", section = e?.Section ?? "", rollNo = e?.RollNo ?? "" };
+        }).ToList();
         return Result<object>.Success(children);
     }
 }
@@ -259,8 +322,10 @@ public sealed class GetParentPortalChildFeesQueryHandler(
 {
     public async Task<Result<object>> Handle(GetParentPortalChildFeesQuery request, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(user.UserExternalId) && user.UserId is null)
+        if (user.UserId is null)
             return Result<object>.Failure(Error.Forbidden("Authenticated user required."));
+        if (!await ParentPortalAccess.IsLinkedChildAsync(db, user.UserId.Value, request.ChildId, ct))
+            return Result<object>.Failure(Error.Forbidden("Child is not linked to this parent."));
         var query = db.FeeInvoices.AsNoTracking()
             .Where(f => f.StudentExternalId == request.ChildId && !f.IsDeleted);
         if (financialYear.IsResolved)
@@ -275,11 +340,18 @@ public sealed class GetParentPortalChildFeesQueryHandler(
     }
 }
 
-public sealed class GetParentPortalChildAttendanceQueryHandler(EduSyncDbContext db, IFinancialYearContext financialYear)
+public sealed class GetParentPortalChildAttendanceQueryHandler(
+    EduSyncDbContext db,
+    ICurrentUserContext user,
+    IFinancialYearContext financialYear)
     : IRequestHandler<GetParentPortalChildAttendanceQuery, Result<object>>
 {
     public async Task<Result<object>> Handle(GetParentPortalChildAttendanceQuery request, CancellationToken ct)
     {
+        if (user.UserId is null)
+            return Result<object>.Failure(Error.Forbidden("Authenticated user required."));
+        if (!await ParentPortalAccess.IsLinkedChildAsync(db, user.UserId.Value, request.ChildId, ct))
+            return Result<object>.Failure(Error.Forbidden("Child is not linked to this parent."));
         var query = db.AttendanceRecords.AsNoTracking()
             .Where(a => a.EntityExternalId == request.ChildId && !a.IsDeleted);
         if (financialYear.IsResolved)
@@ -295,11 +367,15 @@ public sealed class GetParentPortalChildAttendanceQueryHandler(EduSyncDbContext 
     }
 }
 
-public sealed class GetParentPortalChildTransportQueryHandler(EduSyncDbContext db)
+public sealed class GetParentPortalChildTransportQueryHandler(EduSyncDbContext db, ICurrentUserContext user)
     : IRequestHandler<GetParentPortalChildTransportQuery, Result<object>>
 {
     public async Task<Result<object>> Handle(GetParentPortalChildTransportQuery request, CancellationToken ct)
     {
+        if (user.UserId is null)
+            return Result<object>.Failure(Error.Forbidden("Authenticated user required."));
+        if (!await ParentPortalAccess.IsLinkedChildAsync(db, user.UserId.Value, request.ChildId, ct))
+            return Result<object>.Failure(Error.Forbidden("Child is not linked to this parent."));
         var assignment = await db.TransportAssignments.AsNoTracking()
             .FirstOrDefaultAsync(a => a.StudentExternalId == request.ChildId && !a.IsDeleted && a.Status == "active", ct);
         if (assignment is null)

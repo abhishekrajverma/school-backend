@@ -12,6 +12,7 @@
     <ProjectReference Include="..\Modules\EduSync.Modules.Attendance\EduSync.Modules.Attendance.csproj" />
     <ProjectReference Include="..\Modules\EduSync.Modules.Fees\EduSync.Modules.Fees.csproj" />
     <ProjectReference Include="..\Modules\EduSync.Modules.Exams\EduSync.Modules.Exams.csproj" />
+    <ProjectReference Include="..\Modules\EduSync.Modules.Assignments\EduSync.Modules.Assignments.csproj" />
     <ProjectReference Include="..\Modules\EduSync.Modules.Timetable\EduSync.Modules.Timetable.csproj" />
     <ProjectReference Include="..\Modules\EduSync.Modules.Notifications\EduSync.Modules.Notifications.csproj" />
     <ProjectReference Include="..\Modules\EduSync.Modules.Payroll\EduSync.Modules.Payroll.csproj" />

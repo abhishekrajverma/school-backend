@@ -17,7 +17,7 @@ public sealed class Teacher : TenantEntity
     public string? Phone { get; set; }
     public decimal Salary { get; set; }
     public DateOnly? JoiningDate { get; set; }
-    public string Status { get; set; } = "active";
+    public string LifecycleStatus { get; set; } = "active";
     public string? ClassesJson { get; set; }
     public string? AvatarUrl { get; set; }
 

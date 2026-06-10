@@ -14,6 +14,10 @@ internal sealed class AdmissionApplicationConfiguration : IEntityTypeConfigurati
         builder.HasIndex(x => new { x.TenantId, x.ExternalId }).IsUnique();
         builder.HasIndex(x => new { x.TenantId, x.ApplicationNo }).IsUnique();
         builder.HasIndex(x => new { x.TenantId, x.Status });
+        builder.HasIndex(x => new { x.TenantId, x.RegistrationId });
+        builder.HasIndex(x => new { x.TenantId, x.BranchId, x.AcademicYearId });
+        builder.Property(x => x.Source).HasMaxLength(16).IsRequired();
+        builder.HasOne(x => x.Registration).WithMany().HasForeignKey(x => x.RegistrationId);
         builder.Property(x => x.FormDataJson).HasColumnType("nvarchar(max)");
         builder.Property(x => x.DocumentsJson).HasColumnType("nvarchar(max)");
         builder.Property(x => x.RowVersion).IsRowVersion();

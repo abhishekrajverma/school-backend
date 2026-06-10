@@ -7,6 +7,7 @@ using EduSync.Modules.Webhooks.Domain;
 using EduSync.Modules.Admissions.Domain;
 using EduSync.Modules.Academics.Domain;
 using EduSync.Modules.Attendance.Domain;
+using EduSync.Modules.Assignments.Domain;
 using EduSync.Modules.Exams.Domain;
 using EduSync.Modules.Fees.Domain;
 using EduSync.Modules.Notifications.Domain;
@@ -34,24 +35,38 @@ namespace EduSync.Infrastructure.Persistence;
 public sealed class EduSyncDbContext(
     DbContextOptions<EduSyncDbContext> options,
     ITenantContext tenantContext,
+    IBranchContext branchContext,
     IIntegrationEventCollector eventCollector) : DbContext(options)
 {
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<TenantSubscription> TenantSubscriptions => Set<TenantSubscription>();
     public DbSet<AcademicYear> AcademicYears => Set<AcademicYear>();
+    public DbSet<Branch> Branches => Set<Branch>();
     public DbSet<User> Users => Set<User>();
     public DbSet<TenantMembership> TenantMemberships => Set<TenantMembership>();
+    public DbSet<BranchMembership> BranchMemberships => Set<BranchMembership>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Student> Students => Set<Student>();
+    public DbSet<StudentEnrollment> StudentEnrollments => Set<StudentEnrollment>();
+    public DbSet<StudentParent> StudentParents => Set<StudentParent>();
+    public DbSet<PromotionBatch> PromotionBatches => Set<PromotionBatch>();
+    public DbSet<PromotionBatchItem> PromotionBatchItems => Set<PromotionBatchItem>();
     public DbSet<Teacher> Teachers => Set<Teacher>();
+    public DbSet<TeacherAssignment> TeacherAssignments => Set<TeacherAssignment>();
     public DbSet<Parent> Parents => Set<Parent>();
     public DbSet<SchoolClass> Classes => Set<SchoolClass>();
     public DbSet<Subject> Subjects => Set<Subject>();
+    public DbSet<Registration> Registrations => Set<Registration>();
+    public DbSet<RegistrationDocument> RegistrationDocuments => Set<RegistrationDocument>();
     public DbSet<AdmissionApplication> AdmissionApplications => Set<AdmissionApplication>();
+    public DbSet<AdmissionApproval> AdmissionApprovals => Set<AdmissionApproval>();
     public DbSet<AttendanceRecord> AttendanceRecords => Set<AttendanceRecord>();
     public DbSet<FeeInvoice> FeeInvoices => Set<FeeInvoice>();
     public DbSet<FeePayment> FeePayments => Set<FeePayment>();
     public DbSet<Exam> Exams => Set<Exam>();
+    public DbSet<ExamResult> ExamResults => Set<ExamResult>();
+    public DbSet<Assignment> Assignments => Set<Assignment>();
+    public DbSet<StudentAssignment> StudentAssignments => Set<StudentAssignment>();
     public DbSet<TimetableEntry> TimetableEntries => Set<TimetableEntry>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<PayrollRecord> PayrollRecords => Set<PayrollRecord>();
@@ -84,6 +99,15 @@ public sealed class EduSyncDbContext(
     {
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {
+            if (typeof(BranchEntity).IsAssignableFrom(entityType.ClrType))
+            {
+                var method = typeof(EduSyncDbContext)
+                    .GetMethod(nameof(SetBranchAndSoftDeleteFilter), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+                    .MakeGenericMethod(entityType.ClrType);
+                method.Invoke(null, [modelBuilder, tenantContext, branchContext]);
+                continue;
+            }
+
             if (typeof(TenantEntity).IsAssignableFrom(entityType.ClrType))
             {
                 var method = typeof(EduSyncDbContext)
@@ -119,17 +143,30 @@ public sealed class EduSyncDbContext(
             tenantContext.TenantId != null && e.TenantId == tenantContext.TenantId && !e.IsDeleted);
     }
 
+    private static void SetBranchAndSoftDeleteFilter<TEntity>(
+        ModelBuilder modelBuilder,
+        ITenantContext tenantContext,
+        IBranchContext branchContext)
+        where TEntity : BranchEntity
+    {
+        modelBuilder.Entity<TEntity>().HasQueryFilter(e =>
+            tenantContext.TenantId != null
+            && e.TenantId == tenantContext.TenantId
+            && !e.IsDeleted
+            && (branchContext.BranchId == null || e.BranchId == branchContext.BranchId));
+    }
+
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
         foreach (var entry in ChangeTracker.Entries())
         {
-            if (entry.Entity is SharedKernel.Entities.AuditableEntity auditable && entry.State is EntityState.Added)
+            if (entry.Entity is AuditableEntity auditable && entry.State is EntityState.Added)
             {
                 auditable.CreatedAt = now;
             }
 
-            if (entry.Entity is SharedKernel.Entities.AuditableEntity updated && entry.State is EntityState.Modified)
+            if (entry.Entity is AuditableEntity updated && entry.State is EntityState.Modified)
             {
                 updated.UpdatedAt = now;
             }
@@ -142,7 +179,7 @@ public sealed class EduSyncDbContext(
             {
                 Id = Guid.NewGuid(),
                 ExternalId = Guid.NewGuid().ToString("N")[..12],
-                TenantId = evt.TenantId,
+                TenantId = evt.TenantId ?? Guid.Empty,
                 EventType = evt.EventType,
                 Payload = evt.Payload,
                 Region = evt.Region,

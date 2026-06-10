@@ -33,6 +33,9 @@ public static class Permissions
     public const string ExamsRead = "exams.read";
     public const string ExamsWrite = "exams.write";
 
+    public const string AssignmentsRead = "assignments.read";
+    public const string AssignmentsWrite = "assignments.write";
+
     public const string TimetableRead = "timetable.read";
     public const string TimetableWrite = "timetable.write";
 
@@ -99,6 +102,7 @@ public static class Permissions
         AttendanceRead, AttendanceWrite,
         FeesRead, FeesWrite, PaymentsRead,
         ExamsRead, ExamsWrite,
+        AssignmentsRead, AssignmentsWrite,
         TimetableRead, TimetableWrite,
         NotificationsRead, NotificationsWrite,
         PayrollRead, PayrollWrite, PayrollProcess,

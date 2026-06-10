@@ -10,8 +10,23 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="NetArchTest.Rules" Version="1.3.2" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\EduSync.Api\EduSync.Api.csproj" />
+    <ProjectReference Include="..\..\src\EduSync.Infrastructure\EduSync.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Modules\EduSync.Modules.Assignments\EduSync.Modules.Assignments.csproj" />
+    <ProjectReference Include="..\..\src\Modules\EduSync.Modules.Admissions\EduSync.Modules.Admissions.csproj" />
+    <ProjectReference Include="..\..\src\Modules\EduSync.Modules.Exams\EduSync.Modules.Exams.csproj" />
+    <ProjectReference Include="..\..\src\Modules\EduSync.Modules.Identity\EduSync.Modules.Identity.csproj" />
+    <ProjectReference Include="..\..\src\Modules\EduSync.Modules.Portals\EduSync.Modules.Portals.csproj" />
+    <ProjectReference Include="..\..\src\Modules\EduSync.Modules.Students\EduSync.Modules.Students.csproj" />
+    <ProjectReference Include="..\..\src\Modules\EduSync.Modules.Tenancy\EduSync.Modules.Tenancy.csproj" />
+    <ProjectReference Include="..\..\src\Modules\EduSync.Modules.Fees\EduSync.Modules.Fees.csproj" />
+    <ProjectReference Include="..\..\src\Modules\EduSync.Modules.Staff\EduSync.Modules.Staff.csproj" />
   </ItemGroup>
 
   <ItemGroup>

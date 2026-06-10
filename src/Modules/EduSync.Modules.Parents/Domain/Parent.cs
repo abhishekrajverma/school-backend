@@ -12,9 +12,7 @@ public sealed class Parent : TenantEntity
     public string? Phone { get; set; }
     public string? Occupation { get; set; }
     public string? Address { get; set; }
-    public string Status { get; set; } = "active";
-    public string? ChildrenJson { get; set; }
-    public string? StudentIdsJson { get; set; }
+    public string LifecycleStatus { get; set; } = "active";
     public string? AvatarUrl { get; set; }
 
     public string FullName => $"{FirstName} {LastName}".Trim();

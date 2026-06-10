@@ -1,12 +1,18 @@
+using EduSync.Infrastructure.Events;
+using EduSync.Infrastructure.MultiRegion;
 using EduSync.Infrastructure.Pagination;
 using EduSync.Infrastructure.Persistence;
 using EduSync.Infrastructure.Tenancy;
 using EduSync.Modules.Admissions.Application;
 using EduSync.Modules.Admissions.Application.Dtos;
 using EduSync.Modules.Admissions.Domain;
+using EduSync.Modules.Events.Domain;
+using EduSync.Modules.Students.Domain;
+using EduSync.SharedKernel.Constants;
 using EduSync.SharedKernel.Pagination;
 using EduSync.SharedKernel.Results;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace EduSync.Infrastructure.Application.Admissions;
@@ -14,7 +20,6 @@ namespace EduSync.Infrastructure.Application.Admissions;
 public sealed class ListAdmissionsQueryHandler(EduSyncDbContext db)
     : IRequestHandler<ListAdmissionsQuery, Result<PaginatedList<AdmissionListItemDto>>>
 {
-    // list admissions query handler is used to list all admissions based on the status passed in the request 
     public async Task<Result<PaginatedList<AdmissionListItemDto>>> Handle(
         ListAdmissionsQuery request,
         CancellationToken cancellationToken)
@@ -32,7 +37,7 @@ public sealed class ListAdmissionsQueryHandler(EduSyncDbContext db)
             PaginatedList<AdmissionListItemDto>.Create(items, page.Page, page.PageSize, page.TotalCount));
     }
 }
-// get admission by id query handler is used to get an admission by its external id 
+
 public sealed class GetAdmissionByIdQueryHandler(EduSyncDbContext db)
     : IRequestHandler<GetAdmissionByIdQuery, Result<AdmissionDetailDto>>
 {
@@ -46,14 +51,18 @@ public sealed class GetAdmissionByIdQueryHandler(EduSyncDbContext db)
     }
 }
 
-public sealed class CreateAdmissionCommandHandler(EduSyncDbContext db, ITenantContext tenantContext)
+public sealed class CreateAdmissionCommandHandler(
+    EduSyncDbContext db,
+    ITenantContext tenantContext,
+    IBranchContext branchContext,
+    IAcademicYearContext academicYearContext)
     : IRequestHandler<CreateAdmissionCommand, Result<AdmissionDetailDto>>
 {
     public async Task<Result<AdmissionDetailDto>> Handle(CreateAdmissionCommand request, CancellationToken cancellationToken)
     {
-        if (!tenantContext.TenantId.HasValue)
+        if (!tenantContext.TenantId.HasValue || !branchContext.BranchId.HasValue || !academicYearContext.AcademicYearId.HasValue)
         {
-            return Result<AdmissionDetailDto>.Failure(Error.Forbidden("Tenant context is required."));
+            return Result<AdmissionDetailDto>.Failure(Error.Forbidden("Tenant, branch, and academic year are required."));
         }
 
         var formJson = AdmissionJsonHelper.SerializeForm(request.Request.FormData);
@@ -61,8 +70,11 @@ public sealed class CreateAdmissionCommandHandler(EduSyncDbContext db, ITenantCo
         {
             Id = Guid.NewGuid(),
             TenantId = tenantContext.TenantId.Value,
+            BranchId = branchContext.BranchId.Value,
+            AcademicYearId = academicYearContext.AcademicYearId.Value,
             ExternalId = Guid.NewGuid().ToString("N")[..12],
             ApplicationNo = $"ADM{DateTime.UtcNow:yyyy}{Random.Shared.Next(100000, 999999)}",
+            Source = AdmissionSources.Online,
             Status = AdmissionStatuses.Draft,
             CurrentStep = request.Request.CurrentStep ?? "personal",
         };
@@ -126,8 +138,115 @@ public sealed class UpdateAdmissionStatusCommandHandler(EduSyncDbContext db)
             return Result<AdmissionDetailDto>.Failure(Error.NotFound("Admission application not found."));
         }
 
-        app.Status = status;
+        var transition = app.TransitionTo(status);
+        if (!transition.IsSuccess)
+        {
+            return Result<AdmissionDetailDto>.Failure(transition.Error!);
+        }
+
         await db.SaveChangesAsync(cancellationToken);
+        return Result<AdmissionDetailDto>.Success(AdmissionJsonHelper.ToDetail(app));
+    }
+}
+
+public sealed class ApproveAdmissionCommandHandler(
+    EduSyncDbContext db,
+    ITenantContext tenant,
+    IBranchContext branch,
+    ICurrentUserContext user,
+    IIntegrationEventCollector events,
+    IRegionContext region,
+    IHttpContextAccessor httpContextAccessor)
+    : IRequestHandler<ApproveAdmissionCommand, Result<AdmissionDetailDto>>
+{
+    public async Task<Result<AdmissionDetailDto>> Handle(ApproveAdmissionCommand request, CancellationToken ct)
+    {
+        var app = await db.AdmissionApplications.FirstOrDefaultAsync(
+            a => a.ExternalId == request.ExternalId && !a.IsDeleted, ct);
+        if (app is null)
+        {
+            return Result<AdmissionDetailDto>.Failure(Error.NotFound("Admission application not found."));
+        }
+
+        if (app.Status == AdmissionStatuses.Approved && !string.IsNullOrEmpty(app.ApprovedStudentExternalId))
+        {
+            return Result<AdmissionDetailDto>.Success(AdmissionJsonHelper.ToDetail(app));
+        }
+
+        if (user.UserId is null)
+        {
+            return Result<AdmissionDetailDto>.Failure(Error.Forbidden("Authenticated user required."));
+        }
+
+        var approveResult = app.Approve(user.UserId.Value, request.Request?.Remarks);
+        if (!approveResult.IsSuccess)
+        {
+            return Result<AdmissionDetailDto>.Failure(approveResult.Error!);
+        }
+
+        var fields = AdmissionJsonHelper.ParseStudentFields(app.FormDataJson);
+        var admissionNo = app.ApplicationNo;
+
+        if (await db.Students.AnyAsync(
+                s => s.TenantId == app.TenantId && s.AdmissionNo == admissionNo && !s.IsDeleted, ct))
+        {
+            admissionNo = $"{app.ApplicationNo}-{Random.Shared.Next(100, 999)}";
+        }
+
+        var student = new Student
+        {
+            Id = Guid.NewGuid(),
+            TenantId = app.TenantId,
+            ExternalId = Guid.NewGuid().ToString("N")[..12],
+            FirstName = fields.FirstName,
+            LastName = fields.LastName,
+            Email = fields.Email,
+            Phone = fields.Phone,
+            AdmissionNo = admissionNo,
+            LifecycleStatus = LifecycleStatuses.Active,
+            AdmissionApplicationId = app.Id,
+        };
+
+        var enrollment = new StudentEnrollment
+        {
+            Id = Guid.NewGuid(),
+            TenantId = app.TenantId,
+            BranchId = app.BranchId,
+            ExternalId = Guid.NewGuid().ToString("N")[..12],
+            StudentId = student.Id,
+            AcademicYearId = app.AcademicYearId,
+            ClassName = app.ClassSought ?? "Unassigned",
+            Section = fields.Section ?? "A",
+            RollNo = fields.RollNo ?? "0",
+            EnrollmentStatus = EnrollmentStatuses.Enrolled,
+            EnrolledAt = DateTime.UtcNow,
+        };
+
+        db.Students.Add(student);
+        db.StudentEnrollments.Add(enrollment);
+
+        app.ApprovedStudentExternalId = student.ExternalId;
+
+        events.Add(IntegrationEventFactory.Create(
+            IntegrationEventTypes.AdmissionApproved,
+            new { admissionExternalId = app.ExternalId, studentExternalId = student.ExternalId, enrollmentExternalId = enrollment.ExternalId },
+            tenant,
+            region,
+            httpContextAccessor));
+        events.Add(IntegrationEventFactory.Create(
+            IntegrationEventTypes.StudentCreated,
+            new { studentExternalId = student.ExternalId, admissionNo = student.AdmissionNo, className = enrollment.ClassName },
+            tenant,
+            region,
+            httpContextAccessor));
+        events.Add(IntegrationEventFactory.Create(
+            IntegrationEventTypes.StudentEnrolled,
+            new { studentExternalId = student.ExternalId, enrollmentExternalId = enrollment.ExternalId, className = enrollment.ClassName },
+            tenant,
+            region,
+            httpContextAccessor));
+
+        await db.SaveChangesAsync(ct);
         return Result<AdmissionDetailDto>.Success(AdmissionJsonHelper.ToDetail(app));
     }
 }
@@ -144,14 +263,12 @@ public sealed class SubmitAdmissionCommandHandler(EduSyncDbContext db)
             return Result<AdmissionDetailDto>.Failure(Error.NotFound("Admission application not found."));
         }
 
-        if (app.Status != AdmissionStatuses.Draft)
+        var submitResult = app.Submit();
+        if (!submitResult.IsSuccess)
         {
-            return Result<AdmissionDetailDto>.Failure(Error.Conflict("Application is already submitted."));
+            return Result<AdmissionDetailDto>.Failure(submitResult.Error!);
         }
 
-        app.Status = AdmissionStatuses.Submitted;
-        app.CurrentStep = "review";
-        app.SubmittedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
         return Result<AdmissionDetailDto>.Success(AdmissionJsonHelper.ToDetail(app));
     }

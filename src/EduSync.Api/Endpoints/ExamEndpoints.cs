@@ -42,7 +42,17 @@ public static class ExamEndpoints
 
         }).RequirePermission(Permissions.ExamsRead);
 
+        group.MapGet("/results", async (string? examId, string? studentId, Guid? academicYearId, ISender sender) =>
+        {
+            var result = await sender.Send(new ListExamResultsQuery(examId, studentId, academicYearId));
+            return result.ToHttpResult(dto => Results.Ok(dto));
+        }).RequirePermission(Permissions.ExamsRead);
 
+        group.MapPost("/results", async (RecordExamResultRequest body, ISender sender) =>
+        {
+            var result = await sender.Send(new RecordExamResultCommand(body));
+            return result.ToHttpResult(dto => Results.Created($"/api/exams/results/{dto!.Id}", dto));
+        }).RequirePermission(Permissions.ExamsWrite);
 
         group.MapGet("/{id}", async (string id, ISender sender) =>
 
@@ -89,8 +99,6 @@ public static class ExamEndpoints
             return result.ToHttpResult();
 
         }).RequirePermission(Permissions.ExamsWrite);
-
-
 
         return group;
 

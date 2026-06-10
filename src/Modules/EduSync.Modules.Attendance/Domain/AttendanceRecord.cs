@@ -7,6 +7,8 @@ public sealed class AttendanceRecord : TenantEntity
     public Guid Id { get; set; }
     public string ExternalId { get; set; } = string.Empty;
     public string FinancialYear { get; set; } = string.Empty;
+    public Guid? AcademicYearId { get; set; }
+    public Guid? BranchId { get; set; }
     public string EntityType { get; set; } = "student";
     public string EntityExternalId { get; set; } = string.Empty;
     public string EntityName { get; set; } = string.Empty;

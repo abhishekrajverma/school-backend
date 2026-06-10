@@ -13,6 +13,7 @@ internal sealed class TeacherConfiguration : IEntityTypeConfiguration<Teacher>
         builder.Property(x => x.ExternalId).HasMaxLength(64).IsRequired();
         builder.HasIndex(x => new { x.TenantId, x.ExternalId }).IsUnique();
         builder.HasIndex(x => new { x.TenantId, x.EmployeeId }).IsUnique();
+        builder.Property(x => x.LifecycleStatus).HasMaxLength(32).IsRequired();
         builder.Property(x => x.Salary).HasPrecision(18, 2);
         builder.Property(x => x.RowVersion).IsRowVersion();
     }

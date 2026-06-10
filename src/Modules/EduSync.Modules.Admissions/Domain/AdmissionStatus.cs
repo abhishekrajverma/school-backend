@@ -13,4 +13,17 @@ public static class AdmissionStatuses
     {
         Draft, Submitted, UnderReview, Approved, Rejected, Waitlisted,
     };
+
+    private static readonly Dictionary<string, HashSet<string>> AllowedTransitions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [Draft] = [Submitted],
+        [Submitted] = [UnderReview, Rejected],
+        [UnderReview] = [Approved, Rejected, Waitlisted],
+        [Waitlisted] = [Approved, Rejected],
+        [Approved] = [],
+        [Rejected] = [],
+    };
+
+    public static bool CanTransition(string from, string to) =>
+        AllowedTransitions.TryGetValue(from, out var allowed) && allowed.Contains(to);
 }
